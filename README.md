@@ -8,7 +8,7 @@ FerriScribe desktop runs all AI **locally** (whisper.cpp STT + Ollama/LM Studio/
 
 ```
 [Flutter app]  --encrypted audio / docs-->  [FerriScribe desktop, office-server mode]
- (iOS/Android)          over Tailscale          (Mac Studio — all inference local)
+ (iOS/Android)       HTTP over Tailscale        (Mac Studio — all inference local)
 ```
 
 ## Goals
@@ -27,21 +27,26 @@ FerriScribe desktop runs all AI **locally** (whisper.cpp STT + Ollama/LM Studio/
 ## Privacy & security (non-negotiable — inherited from desktop)
 
 - No hosted AI, no telemetry, no phone-home.
+- No Sentry/Crashlytics/Firebase — crash stack traces can carry transcript fragments. If logging exists, it inherits the desktop's counts/lengths-only rule.
 - PHI at rest encrypted: audio AES-256-GCM; local DB SQLCipher (AES-256).
+- Audio capture must **stream directly into the encryptor** — no plaintext temp file on disk between capture and encryption.
 - Keys/tokens in the platform secure store (Keychain / Keystore via `flutter_secure_storage`).
-- Transport: Tailscale WireGuard; server pairing via QR + token.
-- No PHI in logs — IDs/counts/lengths only.
-- Android `FLAG_SECURE` + iOS screen-capture protection.
+- Short-lived session tokens with refresh; server-side "unpair device" endpoint for lost-phone kill switch.
+- Transport: HTTP over Tailscale (Tailscale WireGuard encrypts the wire; no app-level TLS). Server pairing via QR + token.
+- No PHI in logs — IDs/counts/lengths only. No PHI in SSE event payloads or push notifications.
+- Android `FLAG_SECURE` + iOS screen-capture protection + app-switcher snapshot masking.
+- SQLCipher DB and cached documents excluded from iCloud backup (`NSURLIsExcludedFromBackupKey`) and Android Auto Backup (`android:allowBackup="false"` + extraction rules).
+- Clipboard: explicit user-initiated copies only, never auto-copy PHI.
 
 ## Stack
 
 - Flutter / Dart (iOS + Android)
 - `flutter_secure_storage` — keys/tokens
-- `sqlcipher_flutter_libs` + `drift` — encrypted local cache
-- `record` — microphone capture
-- `cryptography` — AES-256-GCM
+- `sqlcipher_flutter_libs` (pin `^2.1.0`) + `drift` — encrypted local cache
+- `record` — microphone capture (streaming chunks into encryptor)
+- `cryptography` or platform-channel native crypto — streaming AES-256-GCM
 - HTTP over Tailscale — JSON REST + SSE progress
-- download server-rendered PDF/DOCX (`medical-export`) + system share sheet
+- `pdf` / `docx` export + system share sheet
 
 ## Repo layout
 
