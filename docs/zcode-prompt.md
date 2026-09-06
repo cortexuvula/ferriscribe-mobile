@@ -12,7 +12,7 @@ Read and follow these files before writing code — they are the authoritative s
 - The server is the existing FerriScribe desktop repo at `~/Development/rustMedicalAssistant` (GitHub `cortexuvula/ferriscribe`). It runs **two** relevant HTTP services in office-server mode:
   - `medical-sharing` crate on **:11436** — the pairing router: `POST /pair/enroll`, `GET /info`, and loopback-gated `GET /pair/clients` / `POST /pair/revoke/:id`. Also mDNS/Tailscale discovery, whisper supervision, LLM proxying.
   - `src-tauri/src/sharing_vocab_api/` (a Tauri app module, **not** the medical-sharing crate) on **:11437** — the data API: `/v1/vocabulary*`, `/v1/context-templates*`, `/v1/user-dictionary*`, `/v1/condition-chips*`, `/v1/content/sync{,/meta}`, `/v1/content/events` (SSE), `/v1/content/audio/{recording_id}` GET/PUT.
-- **Audio is uploaded as plaintext bytes** (`PUT /v1/content/audio/{id}`); the server encrypts at rest itself (FE1 envelope, `medical_security::file_crypto`) the moment it lands. **Do not build client-side AES-GCM or streaming encryption** — it was explicitly cut from the plan. The app's job is: capture to app-private storage, upload, delete after server confirmation.
+- **Audio is uploaded as plaintext bytes** (`PUT /v1/content/audio/{id}`); the server encrypts at rest itself (FE1 envelope, `medical_security::file_crypto`) the moment it lands. **Do not build client-side AES-GCM or streaming encryption** — it was explicitly cut from the plan. The app's job is: stream capture from the mic into the upload request (plaintext audio lives only in RAM); where a platform forces a temp file, keep it app-private and **shred it immediately after upload** — never merely delete it.
 - **Transport is plain HTTP over Tailscale** (WireGuard encrypts the wire; no app-level TLS). Do not add TLS.
 - **Auth** is a long-lived bearer token from `POST /pair/enroll` (validated by `TokenStore`; failed attempts hit a 429 rate-limit budget). There is **no TTL/refresh** — do not invent a refresh flow.
 - **Pipeline reality:** `process_recording` is **transcribe → SOAP only** (stages: `transcribing → generating_soap → completed | failed`, reported via Tauri events, not HTTP). Referral/letter/synopsis/peer-discussion are **separate commands** triggered individually. The authoritative pipeline-step enum is `crates/processing/src/pipeline.rs:63-72`: `PipelineStep::{Transcribing, GeneratingSoap, GeneratingReferral, GeneratingLetter, ExtractingData, IndexingRag, Complete}`. (A claim that `core/src/types/pipeline.rs` holds `Transcription → IcdCoding → …` was checked and is false — that file does not exist.)
@@ -33,8 +33,8 @@ Implement the phases in `docs/implementation-plan.md` in order (0 → 4), plus t
 
 1. **No cloud AI, no telemetry, no phone-home.** The only remote peer is the paired FerriScribe server over Tailscale (:11436 and :11437). Never call a hosted AI/STT/TTS/OCR provider.
 2. **No crash reporting SDK** — no Sentry/Crashlytics/Firebase. Crash stack traces can carry transcript fragments. Logging inherits the desktop's counts/lengths-only rule.
-3. **No client-side audio encryption.** Audio goes up as plaintext bytes; the server owns at-rest encryption (FE1). Keep pending audio in app-private storage, excluded from backups, deleted after confirmed upload.
-4. **PHI at rest on-device:** local DB SQLCipher via `sqlcipher_flutter_libs` (pin `^2.1.0`); tokens in `flutter_secure_storage`. No plaintext temp files outside app-private storage, ever.
+3. **No client-side audio encryption.** Audio goes up as plaintext bytes; the server owns at-rest encryption (FE1). Capture must **stream from the mic into the upload request** so plaintext audio lives only in RAM. Where a platform technically forces a temp file: app-private storage, excluded from backups, **shredded (overwritten, not merely deleted) immediately after confirmed upload**.
+4. **PHI at rest on-device:** local DB SQLCipher via `sqlcipher_flutter_libs` (pin `^2.1.0`); tokens in `flutter_secure_storage`. **No plaintext audio file at rest, ever** — stream capture into the upload request (RAM only); where a platform forces a temp file: app-private, backup-excluded, shredded immediately after confirmed upload.
 5. **No PHI in logs** on either side — log IDs/counts/lengths only. No PHI in SSE event payloads (IDs only) or push notifications.
 6. **Never copy PHI to the OS clipboard** automatically. Explicit user-initiated copies only (iOS clipboard is readable by any foreground app and syncs via Universal Clipboard).
 7. **Screen protection:** Android `FLAG_SECURE`; iOS screen-capture block; **app-switcher snapshot masking** (blur overlay on `AppLifecycleState.inactive` — iOS snapshots the last frame to disk unencrypted).
@@ -56,8 +56,8 @@ Implement the phases in `docs/implementation-plan.md` in order (0 → 4), plus t
 
 ### PHI leak checklist (explicit acceptance gate — verify and report each):
 - **App-switcher mask:** screenshot of app in app-switcher shows blur, not content.
-- **Backup exclusion:** `adb backup` (Android) / iTunes backup (iOS) inspection confirms document cache and pending audio not included.
-- **Pending-audio hygiene:** after upload confirmation, assert no audio remains in app storage.
+- **Backup exclusion:** `adb backup` (Android) / iTunes backup (iOS) inspection confirms document cache — and any platform-forced pending-audio temp file — not included.
+- **Temp-file hygiene:** after a recording session, assert zero plaintext audio files in the app's temp/storage directories; where a platform forced a temp file, verify it was shredded (overwritten, not merely deleted) immediately after upload. (At-rest gate, independent of transport — unaffected by the cut of client-side encryption.)
 - **Clipboard audit:** verify no auto-copy of PHI after recording/generation.
 - **Log scan:** grep app logs for transcript fragments — must find none.
 - **No crash reporting:** confirm no Sentry/Crashlytics/Firebase SDK present in dependencies.
@@ -65,4 +65,4 @@ Implement the phases in `docs/implementation-plan.md` in order (0 → 4), plus t
 
 ## Report
 
-List the Dart packages/features added per phase, the server-side API additions (with exact source files touched — expect `src-tauri/src/sharing_vocab_api/` for the data API and `crates/sharing/` only if pairing changes), the pairing flow, and a per-gate verification result. Do not claim success for any gate you did not actually run — say so explicitly.
+List the Dart packages/features added per phase, the server-side API additions (with exact source files touched — expect `src-tauri/src/sharing_vocab_api/` for the data API and `crates/sharing/` only if pairing changes), the pairing flow, the stream-to-upload capture implementation (no plaintext temp file, or verified shredding), and a per-gate verification result. Do not claim success for any gate you did not actually run — say so explicitly.

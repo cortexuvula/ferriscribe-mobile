@@ -6,7 +6,7 @@
 ┌─────────────────────────────┐         HTTP          ┌──────────────────────────────────┐
 │  Flutter app (iOS/Android)  │  over Tailscale       │  FerriScribe desktop (server)    │
 │  · recorder                 │  ─────────▶           │  · medical-sharing :11436         │
-│  · pending-audio store      │                       │    (pairing router + proxies)    │
+│  · mic→upload streaming     │                       │    (pairing router + proxies)    │
 │  · document review/editor   │  ◀─────────           │  · sharing_vocab_api :11437       │
 │  · SQLCipher offline cache  │    JSON + SSE         │    (vocab/content/audio data API)│
 │  · export download + share  │                       │  · whisper.cpp STT + LLM gen     │
@@ -90,7 +90,7 @@ SSE constraint: event payloads carry **IDs only**, never patient names or transc
 
 ## 6. Mobile data model
 
-- `Recording { id, title, started_at, duration_s, audio_path, status }` — `audio_path` points at pending-upload audio in app-private storage (plaintext on-device pre-upload; the server encrypts at rest on receipt).
+- `Recording { id, title, started_at, duration_s, status }` — no persistent `audio_path`: capture streams from mic into the upload request. If a platform forces a temp file pre-upload, it lives in app-private storage only and is shredded immediately after upload confirmation.
 - `Document { recording_id, doc_type, body, edited, synced_at }`
 - `PatientContext { recording_id, meds, allergies, conditions, notes }` — background context, mirrors desktop.
 - `ServerConfig { tailscale_host, pairing_port(11436), data_port(11437), token, paired_at }`
@@ -101,8 +101,8 @@ Local storage: SQLCipher (AES-256) via `sqlcipher_flutter_libs` (pin `^2.1.0`) +
 
 1. **No hosted AI** — all inference is the physician's local FerriScribe server. The mobile app makes zero calls to any cloud AI provider.
 2. **No telemetry / phone-home** — only the paired server is contacted, over Tailscale. No Sentry/Crashlytics/Firebase — crash stack traces can carry transcript fragments.
-3. **Transport & audio:** plain HTTP over Tailscale (WireGuard on the wire; no app-level TLS). Audio leaves the phone **as plaintext bytes** — this matches the existing desktop↔desktop sync protocol (`PUT /v1/content/audio`); the server encrypts at rest (FE1) on receipt. **Do not add client-side AES-GCM or streaming encryption** — cut from the plan because the server already owns at-rest encryption and the existing endpoint expects plaintext bodies.
-4. **PHI at rest on-device:** document cache in SQLCipher; pending-upload audio in app-private storage only (excluded from backups, wiped after confirmed upload). No plaintext temp files outside app-private storage.
+3. **Transport & audio:** plain HTTP over Tailscale (WireGuard on the wire; no app-level TLS). Audio leaves the phone **as plaintext bytes** — this matches the existing desktop↔desktop sync protocol (`PUT /v1/content/audio`); the server encrypts at rest (FE1) on receipt. **Do not add client-side AES-GCM or any streaming client-side encryption** — cut from the plan because the server already owns at-rest encryption and the existing endpoint expects plaintext bodies. (This prohibits crypto only — streaming *capture* into the upload is required, see invariant 4.)
+4. **PHI at rest on-device:** document cache in SQLCipher; **no plaintext audio file at rest, ever** — capture streams from mic into the upload request (RAM only); where a platform technically forces a temp file it is app-private, backup-excluded, and **shredded (overwritten, not merely deleted) immediately after confirmed upload**.
 5. **No PHI in logs** — IDs/counts/lengths only, on both client and server. No PHI in SSE event payloads or push notifications.
 6. **Screen protection** — Android `FLAG_SECURE`; iOS screen-capture block; **app-switcher snapshot masking** (blur overlay on `AppLifecycleState.inactive` — iOS snapshots the last frame to disk unencrypted).
 7. **Backup exclusion** — SQLCipher DB, document cache, and pending audio excluded from iCloud backup (`NSURLIsExcludedFromBackupKey`) and Android Auto Backup (`android:allowBackup="false"` + extraction rules). Encrypted DB + keychain entry restored to a new device defeats the at-rest model.
