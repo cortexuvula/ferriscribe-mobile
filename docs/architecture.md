@@ -26,7 +26,7 @@ No new inference code — reuse the existing pipeline and providers unchanged. T
 
 ## 3. API contract (HTTP/JSON over Tailscale)
 
-Auth: pairing yields a bearer token (QR → token exchange, same flow as the existing office-server pairing). Every request carries `Authorization: Bearer <token>`. The wire is already encrypted by Tailscale; token auth is the app-level gate.
+Auth: pairing yields a bearer token (QR → token exchange, same flow as the existing office-server pairing). Every request carries `Authorization: Bearer <token>`. The wire is already encrypted by Tailscale; token auth is the app-level gate. **The token authenticates the client only** — the client must also authenticate the server (cert pinning or a pairing-time server-fingerprint check), and the API authorizes each request against the recording's owner (unguessable UUIDs), never an all-or-nothing token across a shared practice server.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -55,15 +55,22 @@ Audio format (decide in Phase 1): whisper.cpp ingests 16 kHz mono WAV natively. 
 
 Retention: local audio is deleted after confirmed server acknowledgment; a storage-usage indicator surfaces what remains (a full day of consultations is ~1 GB — unbounded accumulation will fill the device).
 
-## 5. Security / PHI invariants (carry over from desktop, unchanged)
+## 5. Security / PHI invariants (carry over from desktop, unchanged — plus mobile-specific hardening)
 
 1. **No hosted AI** — all inference is the physician's local FerriScribe server. The mobile app makes zero calls to any cloud AI provider.
-2. **No telemetry / phone-home** — only the paired server is contacted, over Tailscale.
-3. **PHI at rest** — audio AES-256-GCM; local DB SQLCipher. No plaintext temp files.
+2. **No telemetry / phone-home, and no third-party crash/analytics SDK** (Sentry/Firebase/Crashlytics) — only the paired server is contacted, over Tailscale. Ban the dependency, not just the network call.
+3. **PHI at rest** — audio chunked AES-256-GCM with a **random 96-bit nonce per blob** (stored alongside the ciphertext); local DB SQLCipher. Recording is encrypted **in-memory/streaming** — never buffer plaintext audio to a file, and disallow recorder plugins that write their own plaintext cache files. No plaintext temp files, ever.
 4. **No PHI in logs** — IDs/counts/lengths only, on both client and server.
-5. **Screen protection** — Android `FLAG_SECURE` via a platform channel in `MainActivity.onCreate` (set before first frame; blocks screenshots/recording but NOT HDMI/Miracast). iOS has no declarative equivalent: use a `UIScreen.isCaptured` observer to overlay a blank view while recording, plus an `applicationWillResignActive` blur for the app-switcher snapshot.
-6. **Clipboard** — never auto-copy PHI to the OS clipboard (cloud clipboard sync).
-7. **Token hygiene** — bearer token in `flutter_secure_storage`; server tokens never logged.
+5. **Screen protection** — Android `FLAG_SECURE` via a platform channel in `MainActivity.onCreate` (set before first frame; blocks screenshots/recording but NOT HDMI/Miracast), plus `importantForAccessibility=no`/data-masking on PHI views (Android 14+ partial screen-share and accessibility services can read the view hierarchy). iOS: `UIScreen.isCaptured` overlay while recording + `applicationWillResignActive` blur for the app-switcher snapshot (iOS takes that snapshot regardless of capture protection).
+6. **Clipboard & text entry** — never auto-copy PHI to the OS clipboard. On PHI text fields: disable autocorrect/spell-check/predictive-text (`autocorrectionType = .no`, `spellCheckingType = .no`) and block third-party keyboards (force system keyboard) — full-access keyboards and iOS text-prediction learn from typed PHI.
+7. **Server authentication** — the bearer token authenticates the client only. The client must authenticate the **server** too: cert pinning or a pairing-time server-fingerprint check, so a rogue tailnet host can't harvest tokens/audio. Tokens have lifetime/expiry/refresh/revocation; QR pairing tokens are high-entropy, one-time, and short-expiry.
+8. **Per-recording authorization** — the API authorizes each request against the recording's owner, not a single all-or-nothing token; job/recording IDs are unguessable (UUID, not sequential), so one paired device can't enumerate another patient's recordings on a shared practice server.
+9. **Export/share path** — a streamed PDF/DOCX is plaintext PHI the moment it's written for sharing. Write exports to an app-private location, no PHI in the filename, present via the share sheet, and delete the plaintext copy after the share completes. AirDrop/print are the physician's own action.
+10. **iOS backup exclusion** — exclude the SQLCipher DB and encrypted blobs from iCloud/iTunes backup (`NSURLIsExcludedFromBackupKey`), Keychain accessibility `...ThisDeviceOnly`; Android `android:allowBackup="false"`. A device restore must not migrate PHI.
+11. **Key management** — AES key wipe-on-unpair (unpairing deletes local keys + cached PHI). `flutter_secure_storage` requires a declared min-API floor (Android <23 falls back to weaker storage — enforce it).
+12. **App lock** — auto-lock after background/inactivity with re-auth (biometric/PIN) on resume. A phone with PHI open and no lock is a downgrade from the desktop posture.
+13. **Offline cache lifecycle** — cached documents are deleted on unpair, purged when the server deletes the recording, and subject to a retention policy. PHI on a lost/stolen/traded-in phone is the weakest link — acknowledge and bound it.
+14. **Notifications & widgets** — no PHI in local notifications, lock-screen previews, or widgets (patient names, doc snippets). Completion notifications use IDs/titles only.
 
 ## 6. Decisions & open questions
 

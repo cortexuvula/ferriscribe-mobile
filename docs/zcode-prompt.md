@@ -29,6 +29,12 @@ Implement the phases in `docs/implementation-plan.md` in order (0 → 4), plus t
 7. **Reliable background upload** — iOS `NSURLSession` background sessions (delegate-based, not `http`/`dio`), Android `WorkManager`/foreground service. A recording must never be silently lost when the app backgrounds.
 8. **drift codegen** — regenerate `.g.dart` with `dart run build_runner build --delete-conflicting-outputs`; never hand-edit generated files.
 9. **`flutter_secure_storage` resilience** — tolerate Android Keystore key-corruption (catch `BadPaddingException`, re-prompt pairing; never crash on an unreadable value).
+10. **No third-party crash/analytics SDK** — no Sentry/Firebase/Crashlytics or equivalent (ban the dependency, not just the call).
+11. **iOS backup exclusion** — exclude the SQLCipher DB and audio blobs from iCloud/iTunes backup (`NSURLIsExcludedFromBackupKey`), Keychain accessibility `...ThisDeviceOnly`; Android `android:allowBackup="false"`. A device restore must not migrate PHI.
+12. **Server authentication & per-recording authorization** — cert-pin or fingerprint-verify the server at pairing; tokens expire/revoke; authorize each request against the recording owner (unguessable UUIDs), never an all-or-nothing token.
+13. **Export handling** — write streamed PDF/DOCX to an app-private location, no PHI in the filename, delete the plaintext copy after the share completes.
+14. **App lock** — auto-lock after background/inactivity with biometric/PIN re-auth on resume.
+15. **No PHI in notifications/widgets/lock-screen previews** — completion notifications use IDs/titles only.
 
 ## Verification (run and report each individually — no chaining into one opaque failure)
 
