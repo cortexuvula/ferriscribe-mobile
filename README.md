@@ -41,7 +41,7 @@ FerriScribe desktop runs all AI **locally** (whisper.cpp STT + Ollama/LM Studio/
 - `record` — microphone capture
 - `cryptography` — AES-256-GCM
 - HTTP over Tailscale — JSON REST + SSE progress
-- `pdf` / `docx` export + system share sheet
+- download server-rendered PDF/DOCX (`medical-export`) + system share sheet
 
 ## Repo layout
 

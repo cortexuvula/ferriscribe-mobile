@@ -21,11 +21,14 @@ Implement the phases in `docs/implementation-plan.md` in order (0 → 4), plus t
 ## Non-negotiable constraints
 
 1. **No cloud AI, no telemetry, no phone-home.** The only remote peer is the paired FerriScribe server over Tailscale. Never call a hosted AI/STT/TTS/OCR provider.
-2. **PHI at rest encrypted:** audio AES-256-GCM; local DB SQLCipher via `sqlcipher_flutter_libs`; keys/tokens in `flutter_secure_storage`. No plaintext temp files, ever.
+2. **PHI at rest encrypted:** audio **chunked** AES-256-GCM (64 KB chunks, streamed from the recorder — never whole-blob); local DB SQLCipher via `sqlcipher_flutter_libs`; keys/tokens in `flutter_secure_storage`. No plaintext temp files, ever.
 3. **No PHI in logs** on either side — log IDs/counts/lengths only.
 4. **Never copy PHI to the OS clipboard** (cloud clipboard sync).
-5. **Screen protection:** Android `FLAG_SECURE`; iOS screen-capture block.
+5. **Screen protection:** Android `FLAG_SECURE` via platform channel (set before first frame; blocks screenshots/recording, not HDMI/Miracast); iOS `UIScreen.isCaptured` overlay while recording + `applicationWillResignActive` blur for the app-switcher snapshot.
 6. **Pairing/token flow:** QR → bearer-token exchange; token persisted in the secure store; server tokens never logged.
+7. **Reliable background upload** — iOS `NSURLSession` background sessions (delegate-based, not `http`/`dio`), Android `WorkManager`/foreground service. A recording must never be silently lost when the app backgrounds.
+8. **drift codegen** — regenerate `.g.dart` with `dart run build_runner build --delete-conflicting-outputs`; never hand-edit generated files.
+9. **`flutter_secure_storage` resilience** — tolerate Android Keystore key-corruption (catch `BadPaddingException`, re-prompt pairing; never crash on an unreadable value).
 
 ## Verification (run and report each individually — no chaining into one opaque failure)
 

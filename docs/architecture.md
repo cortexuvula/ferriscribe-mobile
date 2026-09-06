@@ -32,7 +32,7 @@ Auth: pairing yields a bearer token (QR → token exchange, same flow as the exi
 |---|---|---|
 | POST | `/pair` | QR/token pairing → session token |
 | POST | `/recordings` | upload encrypted audio (AES-GCM blob) → `{ recording_id, job_id }` |
-| GET | `/jobs/{job_id}` | SSE progress events (Queued→Started→Completed per stage) |
+| GET | `/jobs/{job_id}` | SSE progress events (Queued→Started→Completed per stage); **replayable from `?last_event_id=`** so a backgrounded client can reconnect and recover missed events (iOS drops the TCP connection on background) |
 | GET | `/recordings/{id}/documents` | fetch all 5 doc types + metadata |
 | PUT | `/recordings/{id}/documents/{type}` | save an edited document back |
 | POST | `/recordings/{id}/export` | `{ format: pdf\|docx, doc_type }` → streamed file |
@@ -49,13 +49,19 @@ Doc types: `soap | referral | letter | synopsis | peer_discussion`.
 
 Local storage: SQLCipher (AES-256) via `sqlcipher_flutter_libs` + `drift`. Audio blobs encrypted with a key held in `flutter_secure_storage`.
 
+Audio encryption: **chunked** AES-GCM (64 KB chunks, nonce + tag per chunk, streamed from the recorder) — never whole-blob, which OOMs on a 50–150 MB consultation. Prefer `pointycastle` for streaming control over `cryptography`.
+
+Audio format (decide in Phase 1): whisper.cpp ingests 16 kHz mono WAV natively. If recording AAC/Opus (smaller files), the server needs ffmpeg to transcode before transcription. WAV = simple + large; AAC/Opus = small + server-side conversion.
+
+Retention: local audio is deleted after confirmed server acknowledgment; a storage-usage indicator surfaces what remains (a full day of consultations is ~1 GB — unbounded accumulation will fill the device).
+
 ## 5. Security / PHI invariants (carry over from desktop, unchanged)
 
 1. **No hosted AI** — all inference is the physician's local FerriScribe server. The mobile app makes zero calls to any cloud AI provider.
 2. **No telemetry / phone-home** — only the paired server is contacted, over Tailscale.
 3. **PHI at rest** — audio AES-256-GCM; local DB SQLCipher. No plaintext temp files.
 4. **No PHI in logs** — IDs/counts/lengths only, on both client and server.
-5. **Screen protection** — Android `FLAG_SECURE`; iOS screen-capture block in the app switcher.
+5. **Screen protection** — Android `FLAG_SECURE` via a platform channel in `MainActivity.onCreate` (set before first frame; blocks screenshots/recording but NOT HDMI/Miracast). iOS has no declarative equivalent: use a `UIScreen.isCaptured` observer to overlay a blank view while recording, plus an `applicationWillResignActive` blur for the app-switcher snapshot.
 6. **Clipboard** — never auto-copy PHI to the OS clipboard (cloud clipboard sync).
 7. **Token hygiene** — bearer token in `flutter_secure_storage`; server tokens never logged.
 
@@ -64,3 +70,6 @@ Local storage: SQLCipher (AES-256) via `sqlcipher_flutter_libs` + `drift`. Audio
 - **Transport v1:** HTTPS + JSON REST, matching the existing `medical-sharing` HTTP patterns. gRPC is a v2 candidate (lower-latency streaming) but does not gate v1.
 - **Server mode:** v1 uses the desktop app in office-server mode. A dedicated headless `ferriscribe-server` daemon (no GUI) is a v2 candidate.
 - **Offline:** v1 cache is read-only review of already-fetched documents. Offline *generation* is out of scope — the server is required for AI.
+- **`sqlcipher_flutter_libs` on iOS Simulator:** published binaries may ship x86_64-only simulator slices; verify the pinned version has an arm64-simulator slice or the M-series sim build fails at link. Dev-only fallback: `sqlite3_flutter_libs` (unencrypted) behind a compile flag.
+- **`flutter_secure_storage` Android corruption:** some Samsung/Xiaomi devices lose the Keystore master key after OS updates; wrap reads to detect `BadPaddingException` and re-prompt pairing instead of crashing.
+- **`drift` codegen:** every model change needs `dart run build_runner build --delete-conflicting-outputs`; generated `.g.dart` files are not hand-editable. Provide a script/Make target.
