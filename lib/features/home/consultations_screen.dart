@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app_bootstrap.dart';
 import '../../core/api/data_api_client.dart';
 import '../../core/api/models.dart';
+import '../../core/state/connection_state.dart';
 import '../../ui/components/status.dart';
 import '../../ui/theme/app_theme.dart';
 import '../documents/recording_detail_screen.dart';
@@ -40,11 +41,17 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
   @override
   void initState() {
     super.initState();
+    widget.services.connection.addListener(_onConnectionChanged);
     _load();
+  }
+
+  void _onConnectionChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    widget.services.connection.removeListener(_onConnectionChanged);
     _search.dispose();
     super.dispose();
   }
@@ -70,6 +77,15 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
     try {
       final client = DataApiClient.forConfig(config, token);
       final list = await _pullAll(client);
+      // A successful authenticated read proves reachability AND pairing —
+      // the strongest connection fact available.
+      widget.services.connection.publish(
+        Connected(
+          checkedAt: DateTime.now(),
+          kind: ConnectionCheckKind.authenticatedRead,
+          authOk: true,
+        ),
+      );
       if (mounted) {
         setState(() {
           _recordings = list;
@@ -77,6 +93,9 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
         });
       }
     } on DataAuthException {
+      widget.services.connection.publish(
+        AuthFailure(checkedAt: DateTime.now()),
+      );
       if (mounted) {
         setState(() {
           _loading = false;
@@ -85,6 +104,9 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
       }
     } catch (_) {
       // Offline fallback: serve the last-synced cache.
+      widget.services.connection.publish(
+        Unreachable(checkedAt: DateTime.now()),
+      );
       final cached = await _loadCached();
       if (mounted) {
         setState(() {
@@ -280,7 +302,9 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
 
   String _statusLineText() {
     if (_offline) return 'Offline · showing cached consultations';
-    return 'Office server · connection not checked';
+    final c = widget.services.connection;
+    if (c.checking && c.last == null) return 'Office server · checking…';
+    return 'Office server · ${c.label}';
   }
 
   /// Paged full pull with 401 surfaced as a distinct auth failure and the

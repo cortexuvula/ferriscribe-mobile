@@ -6,6 +6,7 @@ import 'pairing/pairing_service.dart';
 import 'pairing/server_config_repository.dart';
 import 'security/platform_security.dart';
 import 'storage/database/app_database.dart';
+import 'core/state/connection_holder.dart';
 import 'storage/key_store.dart';
 import 'storage/offline_cache_repository.dart';
 
@@ -17,7 +18,11 @@ class AppServices {
     required this.serverConfigRepository,
     required this.pairingService,
     required this.offlineCache,
-  });
+  }) : connection = ConnectionHolder();
+
+  /// §5J app-scoped connection state — shared across screens so a check
+  /// in Settings is visible on the Consultations landing page.
+  final ConnectionHolder connection;
 
   final AppDatabase db;
   final KeyStore keyStore;

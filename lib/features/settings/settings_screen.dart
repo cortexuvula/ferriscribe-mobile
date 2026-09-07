@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../app_bootstrap.dart';
 import '../../core/api/data_api_client.dart';
-import '../../pairing/pairing_client.dart';
+import '../../core/state/connection_state.dart';
+import '../../core/state/presentation_adapters.dart';
 import '../../pairing/server_config_repository.dart';
 import '../../core/build_stamp.dart';
 import '../../ui/components/status.dart';
@@ -23,12 +24,17 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-enum _CheckState { notChecked, checking, reachable, unreachable }
-
 class _SettingsScreenState extends State<SettingsScreen> {
   ServerConfig? _config;
-  _CheckState _checkState = _CheckState.notChecked;
   String? _reachDetail;
+
+  // Derived from the app-scoped holder (§5J): the check result outlives
+  // this screen and is shared with the Consultations landing page.
+  bool get _checking => widget.services.connection.checking;
+  bool get _reachable =>
+      widget.services.connection.last is Connected &&
+      widget.services.connection.last is! ConnectionChecking;
+  bool get _unreachable => widget.services.connection.last is Unreachable;
 
   @override
   void initState() {
@@ -42,32 +48,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// `Check connection` — public /info establishes reachability (not
-  /// authenticated data readiness).
+  /// authenticated data readiness). Runs through the shared
+  /// ConnectionStateAdapter and publishes into the app-scoped
+  /// ConnectionHolder (§5J), so the Consultations landing page reflects
+  /// the result and it survives leaving this screen.
   Future<void> _check() async {
     final config = _config;
     if (config == null) return;
+    final holder = widget.services.connection;
+    final adapter = ConnectionStateAdapter();
+    setState(() => _reachDetail = null);
+    holder.beginCheck();
+    final state = await adapter.check(config: config);
+    holder.publish(state);
+    if (!mounted) return;
     setState(() {
-      _checkState = _CheckState.checking;
-      _reachDetail = null;
+      _reachDetail = switch (state) {
+        Connected(:final serverVersion) when serverVersion != null =>
+          'FerriScribe v$serverVersion',
+        _ => null,
+      };
     });
-    final client = PairingClient(
-      baseUrl: PairingClient.baseUrlFor(config.host, config.pairingPort),
-    );
-    try {
-      final info = await client.fetchInfo();
-      if (!mounted) return;
-      setState(() {
-        _checkState = _CheckState.reachable;
-        _reachDetail =
-            'FerriScribe v${info.version}${info.tailscale != null ? ' · ${info.tailscale}' : ''}';
-      });
-    } on PairingException {
-      if (mounted) setState(() => _checkState = _CheckState.unreachable);
-    } catch (_) {
-      if (mounted) setState(() => _checkState = _CheckState.unreachable);
-    } finally {
-      client.close();
-    }
   }
 
   Future<void> _unpair() async {
@@ -195,22 +196,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SizedBox(
             height: 48,
             child: OutlinedButton.icon(
-              onPressed: _checkState == _CheckState.checking ? null : _check,
-              icon: _checkState == _CheckState.checking
+              onPressed: _checking ? null : _check,
+              icon: _checking
                   ? const SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.wifi_tethering),
-              label: Text(
-                _checkState == _CheckState.checking
-                    ? 'Checking…'
-                    : 'Check connection',
-              ),
+              label: Text(_checking ? 'Checking…' : 'Check connection'),
             ),
           ),
-          if (_checkState == _CheckState.reachable)
+          if (_reachable)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: StatusLine(
@@ -218,7 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 text: _reachDetail ?? 'Reachable',
               ),
             )
-          else if (_checkState == _CheckState.unreachable)
+          else if (_unreachable)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: StatusLine(

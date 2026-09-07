@@ -100,6 +100,9 @@ class _RecordScreenState extends State<RecordScreen> {
       config: config,
       token: token,
     );
+    // §5J: the preflight is a connection fact — publish to the shared
+    // holder so the landing page reflects it after returning.
+    widget.services.connection.publish(state);
     if (mounted) {
       setState(() {
         _connection = state;
@@ -579,7 +582,17 @@ class _RecordScreenState extends State<RecordScreen> {
       children: [
         Expanded(child: content),
         if (!_checking)
-          TextButton(onPressed: _checkConnection, child: const Text('Check')),
+          ConstrainedBox(
+            // Same class as the detail-screen fix: an unconstrained
+            // button in a Row that can receive unconstrained width (via
+            // keepAlive list semantics) throws 'forces an infinite
+            // width' during layout and aborts painting.
+            constraints: const BoxConstraints(maxWidth: 120),
+            child: TextButton(
+              onPressed: _checkConnection,
+              child: const Text('Check'),
+            ),
+          ),
       ],
     );
   }
