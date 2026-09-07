@@ -1,20 +1,25 @@
 import '../../core/api/data_api_client.dart';
 import '../../core/api/models.dart';
 import '../../pairing/server_config_repository.dart';
+import '../../storage/offline_cache_repository.dart';
 
 /// Orchestrates Phase 2 document operations against the paired :11437 data
 /// API: list recordings (content sync), fetch/save documents, and trigger
 /// generation with progress.
+///
+/// Write-through offline cache: every successful pull and document fetch is
+/// persisted to the SQLCipher cache so the data stays viewable offline.
 class DocumentService {
-  DocumentService({this.clientFactory = DataApiClient.forConfig});
+  DocumentService({this.clientFactory = DataApiClient.forConfig, this.cache});
 
   final DataApiClient Function(ServerConfig, String) clientFactory;
+  final OfflineCacheRepository? cache;
 
   DataApiClient _client(ServerConfig config, String token) =>
       clientFactory(config, token);
 
   /// Fetches all recordings (paginated full pull). Deduplicates by id and
-  /// drops soft-deleted rows.
+  /// drops soft-deleted rows. Writes through to the offline cache on success.
   Future<List<SyncRecording>> listRecordings(
     ServerConfig config,
     String token,
@@ -37,13 +42,21 @@ class DocumentService {
       }
       final list = byId.values.toList()
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      await cache?.replaceRecordings(list);
       return list;
     } finally {
       client.close();
     }
   }
 
-  /// Fetches a single document's authoritative content.
+  /// Reads the cached recordings list (offline fallback).
+  Future<List<SyncRecording>> listRecordingsCached() async {
+    if (cache == null) return const [];
+    return cache!.readRecordings();
+  }
+
+  /// Fetches a single document's authoritative content, writing it through to
+  /// the cache.
   Future<RecordingDocument> fetchDocument(
     ServerConfig config,
     String token,
@@ -52,13 +65,23 @@ class DocumentService {
   ) async {
     final client = _client(config, token);
     try {
-      return await client.getDocument(recordingId, doc);
+      final d = await client.getDocument(recordingId, doc);
+      final content = d.content;
+      if (content != null && content.isNotEmpty) {
+        await cache?.upsertDocument(recordingId, doc, content);
+      }
+      return d;
     } finally {
       client.close();
     }
   }
 
-  /// Saves an edited document back to the server.
+  /// Reads the last-cached document content (offline fallback).
+  Future<String?> fetchDocumentCached(String recordingId, DocType doc) async {
+    return cache?.readDocument(recordingId, doc);
+  }
+
+  /// Saves an edited document back to the server, then updates the cache.
   Future<void> saveDocument(
     ServerConfig config,
     String token,
@@ -69,6 +92,7 @@ class DocumentService {
     final client = _client(config, token);
     try {
       await client.saveDocument(recordingId, doc, content);
+      await cache?.upsertDocument(recordingId, doc, content);
     } finally {
       client.close();
     }

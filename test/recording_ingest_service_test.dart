@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ferriscribe_mobile/core/api/data_api_client.dart';
+import 'package:ferriscribe_mobile/core/api/models.dart';
 import 'package:ferriscribe_mobile/features/recording/recording_ingest_service.dart';
 import 'package:ferriscribe_mobile/pairing/server_config_repository.dart';
 
@@ -23,7 +24,10 @@ class _FakeClient extends DataApiClient {
       wavBytes.length;
 
   @override
-  Future<void> generateSoap(String recordingId) async {}
+  Future<void> generateSoap(
+    String recordingId, [
+    GenerateRequest? request,
+  ]) async {}
 
   @override
   Stream<JobSnapshot> jobEvents(String recordingId) async* {

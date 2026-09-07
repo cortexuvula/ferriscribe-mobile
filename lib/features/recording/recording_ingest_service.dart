@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:uuid/uuid.dart';
 
 import '../../core/api/data_api_client.dart';
+import '../../core/api/models.dart';
+import '../../core/api/patient_context.dart';
 import '../../pairing/server_config_repository.dart';
 
 /// Client-side + server-side stages of a recording ingest, in order.
@@ -70,6 +72,7 @@ class RecordingIngestService {
     required Uint8List wav,
     required Duration duration,
     required String filename,
+    PatientContext? patientContext,
   }) async* {
     final client = clientFactory(config, token);
     final id = uuid.v4();
@@ -85,7 +88,10 @@ class RecordingIngestService {
       yield const IngestEvent(stage: IngestStage.uploading);
       await client.uploadAudio(id, wav);
 
-      await client.generateSoap(id);
+      await client.generateSoap(
+        id,
+        GenerateRequest(patientContext: patientContext?.toJson()),
+      );
       // The server marks the job `queued` synchronously before returning 202,
       // so the SSE stream's first event carries `queued` (or later).
 

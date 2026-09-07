@@ -26,13 +26,64 @@ class ServerConfigs extends Table {
   DateTimeColumn get pairedAt => dateTime()();
 }
 
+/// Offline cache of recording metadata, mirroring a content-sync pull.
+///
+/// Populated on every successful sync so the recordings list stays viewable
+/// with the server unreachable. PHI-bearing (`patient_name`), so it lives only
+/// in the SQLCipher DB.
+class CachedRecordings extends Table {
+  TextColumn get id => text()();
+  TextColumn get filename => text()();
+  TextColumn get patientName => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  RealColumn get durationSeconds => real().nullable()();
+  TextColumn get sttProvider => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Offline cache of a fetched document's authoritative content.
+///
+/// Written through on every successful document fetch so the editor can show
+/// the last-known content offline. Content is PHI — SQLCipher only.
+class CachedDocuments extends Table {
+  TextColumn get recordingId => text()();
+  TextColumn get docType => text()();
+  TextColumn get content => text()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {recordingId, docType};
+}
+
+/// Per-recording patient context (medications, conditions, allergies, notes),
+/// captured on-device and attached to generation requests. Mirrors the
+/// server's `PatientContext` (`crates/core/src/types/agent.rs`). PHI — never
+/// logged, SQLCipher only.
+class PatientContexts extends Table {
+  TextColumn get recordingId => text()();
+  TextColumn get patientName => text().nullable()();
+  TextColumn get medicationsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get conditionsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get allergiesJson => text().withDefault(const Constant('[]'))();
+  TextColumn get priorSoapNotesJson =>
+      text().withDefault(const Constant('[]'))();
+
+  @override
+  Set<Column> get primaryKey => {recordingId};
+}
+
 /// The on-device SQLCipher database.
 ///
 /// Opened with a 256-bit key via `PRAGMA key`, which `NativeDatabase.setup`
 /// runs before any other statement — required for SQLCipher. The cipher build
 /// is selected at compile time through `hooks.user_defines.sqlite3.source`
 /// in `pubspec.yaml` (`sqlite3mc` = SQLite3MultipleCiphers, AES-256).
-@DriftDatabase(tables: [ServerConfigs])
+@DriftDatabase(
+  tables: [ServerConfigs, CachedRecordings, CachedDocuments, PatientContexts],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
@@ -46,5 +97,20 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) async {
+      await m.createAll();
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        // Phase 4: offline cache + patient context.
+        await m.createTable(cachedRecordings);
+        await m.createTable(cachedDocuments);
+        await m.createTable(patientContexts);
+      }
+    },
+  );
 }

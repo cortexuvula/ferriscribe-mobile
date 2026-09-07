@@ -24,7 +24,8 @@ class RecordingDetailScreen extends StatefulWidget {
 }
 
 class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
-  final DocumentService _service = DocumentService();
+  DocumentService get _service =>
+      DocumentService(cache: widget.services.offlineCache);
   final ExportService _exportService = ExportService();
 
   /// Which doc type is currently generating (drives the spinner).

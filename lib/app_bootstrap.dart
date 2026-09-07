@@ -7,6 +7,7 @@ import 'pairing/server_config_repository.dart';
 import 'security/platform_security.dart';
 import 'storage/database/app_database.dart';
 import 'storage/key_store.dart';
+import 'storage/offline_cache_repository.dart';
 
 /// App-wide service container, built once at startup.
 class AppServices {
@@ -15,12 +16,14 @@ class AppServices {
     required this.keyStore,
     required this.serverConfigRepository,
     required this.pairingService,
+    required this.offlineCache,
   });
 
   final AppDatabase db;
   final KeyStore keyStore;
   final ServerConfigRepository serverConfigRepository;
   final PairingService pairingService;
+  final OfflineCacheRepository offlineCache;
 }
 
 /// Builds the service graph, generating/persisting the SQLCipher key and
@@ -48,12 +51,14 @@ class AppBootstrap {
 
     final repository = ServerConfigRepository(db, keyStore);
     final pairingService = PairingService(repository: repository);
+    final offlineCache = OfflineCacheRepository(db);
 
     return AppServices(
       db: db,
       keyStore: keyStore,
       serverConfigRepository: repository,
       pairingService: pairingService,
+      offlineCache: offlineCache,
     );
   }
 }

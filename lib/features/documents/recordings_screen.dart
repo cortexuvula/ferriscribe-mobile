@@ -8,7 +8,8 @@ import 'document_service.dart';
 import 'recording_detail_screen.dart';
 
 /// Phase 2 recordings list: pulls all recordings via content sync and opens
-/// the per-recording document view.
+/// the per-recording document view. Falls back to the offline cache when the
+/// server is unreachable.
 class RecordingsScreen extends StatefulWidget {
   const RecordingsScreen({super.key, required this.services});
 
@@ -19,9 +20,8 @@ class RecordingsScreen extends StatefulWidget {
 }
 
 class _RecordingsScreenState extends State<RecordingsScreen> {
-  final DocumentService _service = DocumentService();
-
   bool _loading = true;
+  bool _offline = false;
   String? _error;
   List<SyncRecording> _recordings = const [];
 
@@ -34,6 +34,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
   Future<void> _load() async {
     setState(() {
       _loading = true;
+      _offline = false;
       _error = null;
     });
     final token = await widget.services.serverConfigRepository.readToken();
@@ -47,8 +48,9 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
       }
       return;
     }
+    final service = DocumentService(cache: widget.services.offlineCache);
     try {
-      final list = await _service.listRecordings(config, token);
+      final list = await service.listRecordings(config, token);
       if (mounted) {
         setState(() {
           _recordings = list;
@@ -56,10 +58,16 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
         });
       }
     } catch (_) {
+      // Offline fallback: serve the last-synced cache.
+      final cached = await service.listRecordingsCached();
       if (mounted) {
         setState(() {
+          _recordings = cached;
+          _offline = true;
           _loading = false;
-          _error = 'Could not load recordings.';
+          _error = cached.isEmpty
+              ? 'Server unreachable — nothing cached yet.'
+              : null;
         });
       }
     }
@@ -86,45 +94,49 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_error != null) {
-      return ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (_offline)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Icon(Icons.cloud_off, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Expanded(child: Text('Offline — showing cached recordings.')),
+                ],
+              ),
+            ),
+          ),
+        if (_error != null && _recordings.isEmpty) ...[
+          const SizedBox(height: 24),
           Text(_error!, textAlign: TextAlign.center),
           const SizedBox(height: 12),
           Center(
             child: OutlinedButton(onPressed: _load, child: const Text('Retry')),
           ),
-        ],
-      );
-    }
-    if (_recordings.isEmpty) {
-      return ListView(
-        padding: const EdgeInsets.all(24),
-        children: const [
-          SizedBox(height: 80),
-          Icon(Icons.inbox_outlined, size: 64, color: Colors.grey),
-          SizedBox(height: 12),
-          Text(
+        ] else if (_recordings.isEmpty) ...[
+          const SizedBox(height: 80),
+          const Icon(Icons.inbox_outlined, size: 64, color: Colors.grey),
+          const SizedBox(height: 12),
+          const Text(
             'No recordings yet. Record a consultation from the home screen.',
             textAlign: TextAlign.center,
           ),
+        ] else ...[
+          const SizedBox(height: 4),
+          for (final rec in _recordings)
+            ListTile(
+              leading: const Icon(Icons.description_outlined),
+              title: Text(rec.patientName ?? rec.filename),
+              subtitle: Text(_subtitle(rec)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _open(rec),
+            ),
         ],
-      );
-    }
-    return ListView.separated(
-      itemCount: _recordings.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final rec = _recordings[index];
-        return ListTile(
-          leading: const Icon(Icons.description_outlined),
-          title: Text(rec.patientName ?? rec.filename),
-          subtitle: Text(_subtitle(rec)),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _open(rec),
-        );
-      },
+      ],
     );
   }
 

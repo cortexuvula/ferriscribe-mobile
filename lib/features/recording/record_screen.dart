@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app_bootstrap.dart';
+import '../../core/api/patient_context.dart';
+import 'patient_context_form.dart';
 import 'recording_controller.dart';
 import 'recording_ingest_service.dart';
 
@@ -27,6 +29,7 @@ class _RecordScreenState extends State<RecordScreen> {
   String? _recordingId;
   String? _error;
   String? _warning;
+  PatientContext? _patientContext;
 
   Timer? _ticker;
   Duration _elapsed = Duration.zero;
@@ -95,6 +98,7 @@ class _RecordScreenState extends State<RecordScreen> {
     }
 
     final filename = 'Consultation ${_nowLabel()}';
+    final patientContext = _patientContext;
     _ingestSub = _ingest
         .run(
           config: config,
@@ -102,6 +106,7 @@ class _RecordScreenState extends State<RecordScreen> {
           wav: wav,
           duration: _elapsed,
           filename: filename,
+          patientContext: patientContext,
         )
         .listen(
           (event) {
@@ -112,6 +117,13 @@ class _RecordScreenState extends State<RecordScreen> {
               _error = event.error;
               if (event.isTerminal) _ingesting = false;
             });
+            // Persist patient context once the recording id is known.
+            if (event.recordingId != null && patientContext != null) {
+              widget.services.offlineCache.upsertPatientContext(
+                event.recordingId!,
+                patientContext,
+              );
+            }
           },
           onError: (Object e) {
             if (!mounted) return;
@@ -131,6 +143,16 @@ class _RecordScreenState extends State<RecordScreen> {
       _elapsed = Duration.zero;
       _warning = null;
     });
+  }
+
+  Future<void> _editContext() async {
+    final result = await showPatientContextForm(
+      context,
+      initial: _patientContext,
+    );
+    if (result != null && mounted) {
+      setState(() => _patientContext = result);
+    }
   }
 
   void _showMessage(String message) {
@@ -211,6 +233,16 @@ class _RecordScreenState extends State<RecordScreen> {
               const Icon(Icons.mic_none, size: 96, color: Colors.grey),
               const SizedBox(height: 16),
               const Text('Tap record to begin', style: TextStyle(fontSize: 20)),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _editContext,
+                icon: const Icon(Icons.medication_outlined),
+                label: Text(
+                  _patientContext == null
+                      ? 'Add patient context'
+                      : 'Patient context (${_patientContext!.medications.length + _patientContext!.conditions.length + _patientContext!.allergies.length} items)',
+                ),
+              ),
             ],
             if (_error != null &&
                 !_ingesting &&

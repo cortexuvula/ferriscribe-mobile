@@ -138,13 +138,17 @@ class DataApiClient {
   }
 
   /// `POST /v1/recordings/{id}/generate/soap` — queue the transcribe→SOAP
-  /// pipeline. 202 accepted; progress via [jobStatus]/[jobEvents].
-  Future<void> generateSoap(String recordingId) async {
+  /// pipeline. 202 accepted; progress via [jobStatus]/[jobEvents]. Accepts an
+  /// optional [request] carrying `patient_context` for generation.
+  Future<void> generateSoap(
+    String recordingId, [
+    GenerateRequest? request,
+  ]) async {
     final resp = await _client
         .post(
           Uri.parse('$baseUrl/v1/recordings/$recordingId/generate/soap'),
           headers: _headers,
-          body: '{}',
+          body: jsonEncode(request?.toJson() ?? const <String, dynamic>{}),
         )
         .timeout(const Duration(seconds: 15));
     AppLog.status('generate.soap', resp.statusCode);

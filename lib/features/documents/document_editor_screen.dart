@@ -27,7 +27,8 @@ class DocumentEditorScreen extends StatefulWidget {
 }
 
 class _DocumentEditorScreenState extends State<DocumentEditorScreen> {
-  final DocumentService _service = DocumentService();
+  DocumentService get _service =>
+      DocumentService(cache: widget.services.offlineCache);
   final TextEditingController _controller = TextEditingController();
 
   bool _loading = true;
@@ -71,11 +72,25 @@ class _DocumentEditorScreenState extends State<DocumentEditorScreen> {
         setState(() => _loading = false);
       }
     } catch (_) {
+      // Offline fallback: show last-cached content, editable but not savable
+      // until the server returns.
+      final cached = await _service.fetchDocumentCached(
+        widget.recordingId,
+        widget.doc,
+      );
       if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = 'Could not load document.';
-        });
+        if (cached != null) {
+          _controller.text = cached;
+          setState(() {
+            _loading = false;
+            _error = null;
+          });
+        } else {
+          setState(() {
+            _loading = false;
+            _error = 'Could not load document.';
+          });
+        }
       }
     }
   }
