@@ -14,6 +14,19 @@ import '../../storage/offline_cache_repository.dart';
 import 'connection_state.dart';
 import 'document_state.dart';
 
+/// Thrown by [DocumentStateAdapter.load] when the server answered 401/403.
+///
+/// Deliberately NOT a cache-fallback case: the server is reachable and
+/// rejected the pairing — callers render "pairing needs attention", not a
+/// stale cached document, and not "offline".
+class DocumentAuthException implements Exception {
+  const DocumentAuthException(this.statusCode);
+  final int statusCode;
+
+  @override
+  String toString() => 'DocumentAuthException($statusCode)';
+}
+
 /// Builds §6.1 connection states from real checks.
 ///
 /// `probe` = unauthenticated `GET :11436/info` (reachability + version).
@@ -26,12 +39,15 @@ class ConnectionStateAdapter {
 
   final Future<ServerInfo> Function(String host, int port) _probeInfo;
 
-  static Future<ServerInfo> _defaultProbe(String host, int port) {
+  static Future<ServerInfo> _defaultProbe(String host, int port) async {
     final client = PairingClient(baseUrl: PairingClient.baseUrlFor(host, port));
     try {
-      return client.fetchInfo();
+      // MUST await inside the try: returning the future un-awaited would
+      // run the finally (client.close()) while the request is still in
+      // flight, aborting it. Pinned by
+      // presentation_state_test's probe-against-live-server test.
+      return await client.fetchInfo();
     } finally {
-      // fetchInfo completes before this returns; close after.
       client.close();
     }
   }
@@ -119,8 +135,16 @@ class DocumentStateAdapter {
         cachedAvailable: d.content != null && d.content!.isNotEmpty,
         cachedUpdatedAt: DateTime.now().toUtc(),
       );
-    } on DataApiException {
-      // Server unreachable/failed: serve cache honestly, if present.
+    } on DataApiException catch (e) {
+      // Auth rejection is NOT an offline condition: the server is up and
+      // answered 401/403. Falling back to cached content here would mask
+      // a stale/revoked pairing behind a readable document — the UI must
+      // render "pairing needs attention" instead. Surface it as a typed
+      // exception; only genuine reachability failures fall back to cache.
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        throw DocumentAuthException(e.statusCode);
+      }
+      // Server unreachable/5xx: serve cache honestly, if present.
       final cachedContent = await svc.fetchDocumentCached(recordingId, doc);
       return DocumentLoad(
         docType: doc,
@@ -160,6 +184,10 @@ class DocumentStateAdapter {
   }
 
   /// §6.5 — save with server-ack and cache-write tracked separately.
+  ///
+  /// The server PUT is authoritative. A cache write that fails AFTER the
+  /// server returned 204 must NOT propagate — the edit IS saved; only the
+  /// offline copy is stale. The result reports both facts.
   Future<DocumentSaveResult> save({
     required ServerConfig config,
     required String token,
@@ -174,13 +202,36 @@ class DocumentStateAdapter {
         cacheWritten: false,
       );
     }
-    await svc.saveDocument(config, token, recordingId, doc, content);
-    // saveDocument already wrote through; a cache failure would have
-    // thrown AFTER the server 204 — treat that as cacheWritten: false
-    // rather than a failed save. Normal path: both true.
-    return const DocumentSaveResult(
-      serverAcknowledged: true,
-      cacheWritten: true,
-    );
+
+    // Server first — an exception here means NOT saved; propagate.
+    var serverOk = false;
+    DataApiException? serverError;
+    try {
+      await svc.saveDocument(config, token, recordingId, doc, content);
+      serverOk = true;
+    } on DataApiException catch (e) {
+      serverError = e; // deferred: auth vs offline distinction below
+    }
+
+    if (!serverOk) {
+      // The PUT itself failed. Auth failure is a pairing problem, not a
+      // connectivity one — rethrow typed so callers don't render "offline".
+      final code = serverError!.statusCode;
+      if (code == 401 || code == 403) {
+        throw DocumentAuthException(code);
+      }
+      return DocumentSaveResult(serverAcknowledged: false, cacheWritten: false);
+    }
+
+    // Server acknowledged. Best-effort cache write; failure is reported
+    // honestly as cacheWritten: false and never masks the successful save.
+    var cacheOk = false;
+    try {
+      await _cache?.upsertDocument(recordingId, doc, content);
+      cacheOk = true;
+    } catch (_) {
+      cacheOk = false; // offline copy stale; edit is durable on the server
+    }
+    return DocumentSaveResult(serverAcknowledged: true, cacheWritten: cacheOk);
   }
 }
