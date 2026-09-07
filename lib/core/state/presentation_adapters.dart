@@ -223,12 +223,13 @@ class DocumentStateAdapter {
       return DocumentSaveResult(serverAcknowledged: false, cacheWritten: false);
     }
 
-    // Server acknowledged. Best-effort cache write; failure is reported
-    // honestly as cacheWritten: false and never masks the successful save.
+    // Server acknowledged. The cache write inside saveDocument is
+    // best-effort (failures swallowed there — the server 204 IS the save).
+    // Report cacheWritten honestly by verifying the write landed.
     var cacheOk = false;
     try {
-      await _cache?.upsertDocument(recordingId, doc, content);
-      cacheOk = true;
+      final written = await _cache?.readDocument(recordingId, doc);
+      cacheOk = written == content;
     } catch (_) {
       cacheOk = false; // offline copy stale; edit is durable on the server
     }

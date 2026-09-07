@@ -363,12 +363,15 @@ void main() {
           pairedAt: DateTime.now(),
         );
 
-        // A cache that always fails, injected as the adapter's direct handle.
-        final failingCache = _FailingCache();
+        // Codie's 92cb935 Critical pinned in PRODUCTION shape: the failing
+        // cache rides on the SERVICE (as in production), so the exception
+        // arises inside svc.saveDocument after the 204 — the exact path the
+        // old adapter let escape as a false save-failure.
         final svc = DocumentService(
           clientFactory: (c, t) => DataApiClient.forConfig(cfg, t),
+          cache: _FailingCache(), // service-level, like production
         );
-        final adapter = DocumentStateAdapter(service: svc, cache: failingCache);
+        final adapter = DocumentStateAdapter(service: svc);
 
         final result = await adapter.save(
           config: cfg,

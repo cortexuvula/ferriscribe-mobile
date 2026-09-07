@@ -1,4 +1,5 @@
 import '../../core/api/data_api_client.dart';
+import '../../core/app_logger.dart';
 import '../../core/api/models.dart';
 import '../../pairing/server_config_repository.dart';
 import '../../storage/offline_cache_repository.dart';
@@ -92,9 +93,18 @@ class DocumentService {
     final client = _client(config, token);
     try {
       await client.saveDocument(recordingId, doc, content);
-      await cache?.upsertDocument(recordingId, doc, content);
     } finally {
       client.close();
+    }
+    // Cache write is deliberately OUTSIDE the server call and best-effort:
+    // a successful server PUT (204) is the authoritative save — a local
+    // cache failure must NOT surface as a failed save. The §6.5 adapter
+    // tracks this separately via DocumentSaveResult.cacheWritten.
+    try {
+      await cache?.upsertDocument(recordingId, doc, content);
+    } catch (e) {
+      AppLog.event('document.save.cache-write-failed');
+      // Intentionally swallowed: server state is the truth.
     }
   }
 
