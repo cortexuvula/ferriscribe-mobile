@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../ui/theme/app_theme.dart';
+
 import '../../core/api/patient_context.dart';
 
 /// Patient-context form (§5C): full-screen, scrollable, keyboard-safe.
@@ -166,9 +168,11 @@ class _PatientContextFormState extends State<PatientContextForm> {
                 isRequired: false,
               ),
               const SizedBox(height: 20),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, _current()),
-                child: const Text('Use context'),
+              fullWidthButton(
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, _current()),
+                  child: const Text('Use context'),
+                ),
               ),
               const SizedBox(height: 12),
             ],

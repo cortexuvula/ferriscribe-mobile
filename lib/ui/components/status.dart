@@ -53,9 +53,9 @@ class StatusLine extends StatelessWidget {
         const SizedBox(width: 6),
         Flexible(
           child: Text(
+            // V2: wrap instead of ellipsize — status labels are essential
+            // and must remain fully readable at 320dp / 200% text.
             text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: dense ? 13 : 14,
               color: color,
@@ -209,7 +209,14 @@ class ListLoadingState extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              Text(label, style: TextStyle(color: scheme.onSurfaceVariant)),
+              // V3: flexible so long labels wrap instead of overflowing
+              // at 320dp / 200% text.
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(color: scheme.onSurfaceVariant),
+                ),
+              ),
             ],
           ),
         ),

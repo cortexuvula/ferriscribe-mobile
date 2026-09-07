@@ -518,10 +518,12 @@ class _RecordScreenState extends State<RecordScreen> {
         const SizedBox(height: 24),
         // Start disabled after a failed connection check (per §5B); the
         // user can Check again or proceed once reachable.
-        FilledButton.icon(
-          onPressed: _startEnabled ? _startRecording : null,
-          icon: const Icon(Icons.mic),
-          label: const Text('Start recording'),
+        fullWidthButton(
+          FilledButton.icon(
+            onPressed: _startEnabled ? _startRecording : null,
+            icon: const Icon(Icons.mic),
+            label: const Text('Start recording'),
+          ),
         ),
         if (!_startEnabled)
           Padding(
@@ -582,17 +584,7 @@ class _RecordScreenState extends State<RecordScreen> {
       children: [
         Expanded(child: content),
         if (!_checking)
-          ConstrainedBox(
-            // Same class as the detail-screen fix: an unconstrained
-            // button in a Row that can receive unconstrained width (via
-            // keepAlive list semantics) throws 'forces an infinite
-            // width' during layout and aborts painting.
-            constraints: const BoxConstraints(maxWidth: 120),
-            child: TextButton(
-              onPressed: _checkConnection,
-              child: const Text('Check'),
-            ),
-          ),
+          TextButton(onPressed: _checkConnection, child: const Text('Check')),
       ],
     );
   }
@@ -636,10 +628,12 @@ class _RecordScreenState extends State<RecordScreen> {
             NoticeBanner(tone: AppStatusTone.warning, text: _notice!),
           ],
           const Spacer(),
-          FilledButton.icon(
-            onPressed: _stopAndGenerate,
-            icon: const Icon(Icons.stop),
-            label: const Text('Stop & generate SOAP'),
+          fullWidthButton(
+            FilledButton.icon(
+              onPressed: _stopAndGenerate,
+              icon: const Icon(Icons.stop),
+              label: const Text('Stop & generate SOAP'),
+            ),
           ),
           const SizedBox(height: 8),
           TextButton(
@@ -785,10 +779,14 @@ class _RecordScreenState extends State<RecordScreen> {
             ),
           ),
           const Spacer(),
-          FilledButton.icon(
-            onPressed: _presentation.recordingId.isEmpty ? null : _openSoapNote,
-            icon: const Icon(Icons.description_outlined),
-            label: const Text('Open SOAP note'),
+          fullWidthButton(
+            FilledButton.icon(
+              onPressed: _presentation.recordingId.isEmpty
+                  ? null
+                  : _openSoapNote,
+              icon: const Icon(Icons.description_outlined),
+              label: const Text('Open SOAP note'),
+            ),
           ),
           const SizedBox(height: 8),
           TextButton(

@@ -179,16 +179,23 @@ ThemeData buildAppTheme(Brightness brightness) {
         color: onSurface,
       ),
     ),
+    // V1 (visual review 2af6534): finite button minima. `Size.fromHeight`
+    // sets width to double.infinity, so any button inside an unbounded-
+    // width parent (ListTile trailing, Row in a scroll view) threw a
+    // layout exception at phone width — the blank-screen bug class, at
+    // theme level. Full-width primaries now get their width from a
+    // bounded parent (SizedBox(width: double.infinity, child: ...)),
+    // never from the theme. Use [fullWidthButton] for that.
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(56),
+        minimumSize: const Size(64, 56),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size.fromHeight(48),
+        minimumSize: const Size(64, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         side: BorderSide(color: outline),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
@@ -196,7 +203,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        minimumSize: const Size.fromHeight(48),
+        minimumSize: const Size(64, 48),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
       ),
     ),
@@ -243,4 +250,12 @@ ThemeData buildAppTheme(Brightness brightness) {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
   );
+}
+
+/// Wraps a button in a full-width bounded container (V1): the button's
+/// own minimum is finite (see buildAppTheme), so full-width primaries
+/// take their width from this parent instead of an infinite theme
+/// minimum. Safe inside Column/ListView bodies and bottom bars.
+Widget fullWidthButton(Widget button) {
+  return SizedBox(width: double.infinity, child: button);
 }

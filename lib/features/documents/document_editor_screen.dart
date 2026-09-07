@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../ui/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 
 import '../../app_bootstrap.dart';
@@ -582,28 +584,32 @@ class _DocumentEditorScreenState extends State<DocumentEditorScreen> {
   Widget? _buildFooter(ColorScheme scheme) {
     if (_authNeedsAttention || _loadError != null) return null;
     if (_editing) {
-      return FilledButton.icon(
-        onPressed: _saveStatus == _SaveStatus.saving ? null : _save,
-        icon: _saveStatus == _SaveStatus.saving
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.save_outlined),
-        label: Text(
-          _saveStatus == _SaveStatus.failedServer ||
-                  _saveStatus == _SaveStatus.failedNetwork
-              ? 'Retry save'
-              : 'Save changes',
+      return fullWidthButton(
+        FilledButton.icon(
+          onPressed: _saveStatus == _SaveStatus.saving ? null : _save,
+          icon: _saveStatus == _SaveStatus.saving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.save_outlined),
+          label: Text(
+            _saveStatus == _SaveStatus.failedServer ||
+                    _saveStatus == _SaveStatus.failedNetwork
+                ? 'Retry save'
+                : 'Save changes',
+          ),
         ),
       );
     }
     if (_offlineEntry) return null; // read-only cached (§5G)
-    return FilledButton.tonalIcon(
-      onPressed: _startEditing,
-      icon: const Icon(Icons.edit_outlined),
-      label: const Text('Edit'),
+    return fullWidthButton(
+      FilledButton.tonalIcon(
+        onPressed: _startEditing,
+        icon: const Icon(Icons.edit_outlined),
+        label: const Text('Edit'),
+      ),
     );
   }
 

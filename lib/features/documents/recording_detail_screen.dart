@@ -457,25 +457,71 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
       _DocRowState.notCached => ('Not cached', AppStatusTone.neutral),
     };
 
+    // V2 (visual review): adaptive row. LayoutBuilder picks the shape —
+    // a two-line row with trailing action when width allows, otherwise
+    // name + state stacked above a separately bounded full-width action
+    // so no label is ever ellipsized or clipped at 320dp / 200% text.
     return Column(
       children: [
-        ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-          // Whole row opens available/cached content (§5F).
-          onTap:
-              state == _DocRowState.available ||
-                  state == _DocRowState.cachedOnly
-              ? () => _openEditor(doc)
-              : null,
-          title: Text(
-            doc.label,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: StatusLine(tone: stateTone, text: stateLabel, dense: true),
-          ),
-          trailing: _trailing(doc, state, busy),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final wide =
+                constraints.maxWidth >= 320 &&
+                MediaQuery.textScalerOf(context).scale(14) < 22;
+            if (wide) {
+              return ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                // Whole row opens available/cached content (§5F).
+                onTap:
+                    state == _DocRowState.available ||
+                        state == _DocRowState.cachedOnly
+                    ? () => _openEditor(doc)
+                    : null,
+                title: Text(
+                  doc.label,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: StatusLine(
+                    tone: stateTone,
+                    text: stateLabel,
+                    dense: true,
+                  ),
+                ),
+                trailing: _trailing(doc, state, busy),
+              );
+            }
+            // Narrow / large text: stack, action below, nothing clipped.
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    doc.label,
+                    softWrap: true,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  StatusLine(tone: stateTone, text: stateLabel, dense: true),
+                  if (_trailing(doc, state, busy) != null) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _trailing(doc, state, busy),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
         ),
         if (doc != DocType.values.last)
           Divider(height: 1, color: scheme.outlineVariant),
@@ -499,19 +545,13 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
           child: Icon(Icons.auto_awesome_outlined, size: 20),
         );
       }
-      // Constrained: on a phone-width tile (412dp), an unconstrained
-      // TextButton.icon here blows the ListTile trailing contract
-      // ('trailing widget consumes the entire tile width'), which throws
-      // during layout and leaves the whole route unpainted — the device
-      // 'blank screen'. The label is short and fixed; 120dp is ample and
-      // can never consume the tile.
-      return ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 120),
-        child: TextButton.icon(
-          onPressed: _generating == null ? () => _generate(doc) : null,
-          icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-          label: const Text('Generate'),
-        ),
+      // V1: the theme's finite TextButton minimum (Size(64, 48)) means
+      // this trailing can never demand infinite width; no constraint
+      // patch needed.
+      return TextButton.icon(
+        onPressed: _generating == null ? () => _generate(doc) : null,
+        icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+        label: const Text('Generate'),
       );
     }
     if (state == _DocRowState.cachedOnly && _offline) {
@@ -557,35 +597,41 @@ Future<List<String>?> showPeerDiscussionForm(BuildContext context) {
       valueListenable: errorText,
       builder: (context, error, _) => AlertDialog(
         title: const Text('Peer discussion'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: physician,
-              focusNode: physicianFocus,
-              decoration: InputDecoration(
-                labelText: 'Consultant name *',
-                errorText: error == 'physician' ? 'Required' : null,
+        // V3 (visual review): scrollable + keyboard-safe. The fixed
+        // Column overflowed vertically at 320dp with the keyboard up and
+        // 200% text; SingleChildScrollView inside the dialog keeps all
+        // three fields reachable without clipping the actions.
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: physician,
+                focusNode: physicianFocus,
+                decoration: InputDecoration(
+                  labelText: 'Consultant name *',
+                  errorText: error == 'physician' ? 'Required' : null,
+                ),
               ),
-            ),
-            TextField(
-              controller: specialty,
-              focusNode: specialtyFocus,
-              decoration: InputDecoration(
-                labelText: 'Specialty *',
-                errorText: error == 'specialty' ? 'Required' : null,
+              TextField(
+                controller: specialty,
+                focusNode: specialtyFocus,
+                decoration: InputDecoration(
+                  labelText: 'Specialty *',
+                  errorText: error == 'specialty' ? 'Required' : null,
+                ),
               ),
-            ),
-            TextField(
-              controller: reason,
-              focusNode: reasonFocus,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: 'Reason for discussion *',
-                errorText: error == 'reason' ? 'Required' : null,
+              TextField(
+                controller: reason,
+                focusNode: reasonFocus,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  labelText: 'Reason for discussion *',
+                  errorText: error == 'reason' ? 'Required' : null,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(

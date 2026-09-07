@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../ui/theme/app_theme.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../app_bootstrap.dart';
@@ -179,10 +181,12 @@ class _PairingScreenState extends State<PairingScreen> {
         NoticeBanner(tone: AppStatusTone.error, text: _error!),
       ],
       const SizedBox(height: 28),
-      FilledButton.icon(
-        onPressed: _startScan,
-        icon: const Icon(Icons.qr_code_scanner),
-        label: const Text('Scan pairing QR'),
+      fullWidthButton(
+        FilledButton.icon(
+          onPressed: _startScan,
+          icon: const Icon(Icons.qr_code_scanner),
+          label: const Text('Scan pairing QR'),
+        ),
       ),
       const SizedBox(height: 8),
       TextButton.icon(
@@ -330,16 +334,18 @@ class _PairingScreenState extends State<PairingScreen> {
         NoticeBanner(tone: AppStatusTone.error, text: _error!),
       ],
       const SizedBox(height: 12),
-      FilledButton.icon(
-        onPressed: _busy ? null : _pair,
-        icon: _busy
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.link),
-        label: const Text('Pair this phone'),
+      fullWidthButton(
+        FilledButton.icon(
+          onPressed: _busy ? null : _pair,
+          icon: _busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.link),
+          label: const Text('Pair this phone'),
+        ),
       ),
       const SizedBox(height: 8),
       TextButton(
