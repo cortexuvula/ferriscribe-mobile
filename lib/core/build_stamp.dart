@@ -3,7 +3,7 @@
 library;
 
 /// Git short SHA of the commit this build was made from.
-const String buildSha = 'd74b9b8';
+const String buildSha = '89e25fd';
 
 /// Git commit count at build time (matches the Android versionCode).
-const int buildNumber = 28;
+const int buildNumber = 29;
