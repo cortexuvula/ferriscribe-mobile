@@ -7,8 +7,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SHA=$(git rev-parse --short HEAD)
-COUNT=$(git rev-list --count HEAD)
+# Pin the count to the last NON-STAMP commit: counting HEAD chases its own
+# tail (each stamp commit bumps the count, requiring another stamp).
+# STAMP_BASE is the last real commit; if HEAD is itself a stamp commit,
+# count its parent and mark the SHA with a '+' suffix.
+STAMP_BASE=$(git log --format='%h %s' -1 HEAD)
+if echo "$STAMP_BASE" | grep -q '^\w* Stamp build'; then
+  SHA="$(git rev-parse --short HEAD)+"
+  COUNT=$(($(git rev-list --count HEAD) - 1))
+else
+  SHA=$(git rev-parse --short HEAD)
+  COUNT=$(git rev-list --count HEAD)
+fi
 
 python3 - "$SHA" "$COUNT" <<'PYEOF'
 import sys, re
