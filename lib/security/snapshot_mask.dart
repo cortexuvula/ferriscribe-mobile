@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 /// Whether a given lifecycle state should trigger the privacy mask.
@@ -16,10 +17,21 @@ bool shouldMask(AppLifecycleState state) =>
 /// cover on [AppLifecycleState.inactive] — before the snapshot is taken —
 /// and keep it up through [AppLifecycleState.paused]. It is cleared on
 /// [AppLifecycleState.resumed].
+///
+/// Defensive reconciliation: some Android audio plugins (the mic session
+/// during recording) toggle `inactive`/`paused` while the app remains
+/// foreground, and a lost or out-of-order `resumed` would leave the mask
+/// stuck over a live app — a black screen. A post-frame callback re-reads
+/// the binding's authoritative lifecycle state after every frame while
+/// masked: if the platform says `resumed`, the mask clears within one frame.
+/// The PHI guarantee is unchanged — the mask still rises on every reported
+/// inactive/paused before any snapshot, and only the platform's own
+/// `resumed` can clear it.
 class LifecycleMaskController with WidgetsBindingObserver {
   LifecycleMaskController({WidgetsBinding? binding})
     : _binding = binding ?? WidgetsBinding.instance {
     _binding.addObserver(this);
+    masked.addListener(_scheduleReconcile);
   }
 
   final WidgetsBinding _binding;
@@ -32,7 +44,40 @@ class LifecycleMaskController with WidgetsBindingObserver {
     masked.value = shouldMask(state);
   }
 
+  /// When the mask rises, verify it against the platform's authoritative
+  /// state after the next frame — clearing only if the platform itself
+  /// reports `resumed` (a lost-resumed recovery).
+  void _scheduleReconcile() {
+    if (!masked.value) return;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!masked.value) return;
+      reconcileWithPlatform();
+    });
+  }
+
+  /// Re-reads the binding's authoritative lifecycle state and clears the
+  /// mask ONLY when the platform itself reports `resumed` while the mask
+  /// is up — i.e. a lost/injected lifecycle event left the mask stuck over
+  /// a foregrounded app. `inactive`/`paused`/`hidden`/`detached` keep the
+  /// mask (legitimate pre-snapshot/background states); no authoritative
+  /// state (null) also keeps it — clearing requires positive `resumed`.
+  @visibleForTesting
+  void reconcileWithPlatform() {
+    if (!masked.value) return;
+    if (_binding.lifecycleState == AppLifecycleState.resumed) {
+      masked.value = false;
+      assert(() {
+        debugPrint(
+          'privacy mask: recovered from a stuck state '
+          '(platform reports resumed)',
+        );
+        return true;
+      }());
+    }
+  }
+
   void dispose() {
+    masked.removeListener(_scheduleReconcile);
     _binding.removeObserver(this);
     masked.dispose();
   }

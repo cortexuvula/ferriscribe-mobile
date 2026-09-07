@@ -26,6 +26,32 @@ void main() {
     });
   });
 
+  group('stuck-mask recovery', () {
+    testWidgets('reconcile is a no-op when the mask is already down, and '
+        'does not raise it', (tester) async {
+      final controller = LifecycleMaskController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+
+      // In the test binding the platform lifecycle state is null; the
+      // reconcile must be conservative — never raise the mask, and with no
+      // authoritative resumed state it cannot clear a legitimately-set one.
+      controller.reconcileWithPlatform();
+      expect(controller.masked.value, isFalse);
+
+      controller.didChangeAppLifecycleState(AppLifecycleState.paused);
+      expect(controller.masked.value, isTrue);
+      // Null platform state (test env): the paused mask stays — clearing
+      // requires the platform itself to report resumed.
+      controller.reconcileWithPlatform();
+      expect(controller.masked.value, isTrue);
+
+      controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      expect(controller.masked.value, isFalse);
+    });
+  });
+
   group('AppPrivacyShield', () {
     testWidgets('shows the mask only while masked is true', (tester) async {
       final masked = ValueNotifier<bool>(false);

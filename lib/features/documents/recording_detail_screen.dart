@@ -7,6 +7,7 @@ import '../../core/api/data_api_client.dart';
 import '../../core/api/models.dart';
 import '../../core/state/document_state.dart';
 import '../../core/state/presentation_adapters.dart';
+import '../../pairing/server_config_repository.dart';
 import '../../ui/components/status.dart';
 import '../export/export_service.dart';
 import 'document_editor_screen.dart';
@@ -23,6 +24,7 @@ class RecordingDetailScreen extends StatefulWidget {
     super.key,
     required this.services,
     required this.recording,
+    this.clientFactory,
   }) : recordingId = recording!.id;
 
   /// Id-keyed entry: fetches authoritative metadata on open.
@@ -30,6 +32,7 @@ class RecordingDetailScreen extends StatefulWidget {
     super.key,
     required this.services,
     required this.recordingId,
+    this.clientFactory,
   }) : recording = null;
 
   final AppServices services;
@@ -40,6 +43,10 @@ class RecordingDetailScreen extends StatefulWidget {
 
   /// The recording id — always present.
   final String recordingId;
+
+  /// Optional injectable client factory (tests). Production builds clients
+  /// against the paired server config.
+  final DataApiClient Function(ServerConfig, String)? clientFactory;
 
   @override
   State<RecordingDetailScreen> createState() => _RecordingDetailScreenState();
@@ -54,6 +61,10 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
   SyncRecording? _resolved;
   bool _offline = false;
   bool _authNeedsAttention = false;
+
+  /// True while the id-keyed metadata fetch (or a refresh) is in flight.
+  /// §5A/§5F: a labelled loading state, never a silent near-black screen.
+  bool _metadataLoading = false;
 
   /// Which doc type is currently generating — per-type, so other rows never
   /// appear idle while one runs (§5F).
@@ -70,7 +81,12 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
   void initState() {
     super.initState();
     _resolved = widget.recording;
-    if (_resolved != null) _seed(_resolved!);
+    if (_resolved != null) {
+      _seed(_resolved!);
+    } else {
+      // Id-keyed entry: show a labelled loading state until the fetch lands.
+      _metadataLoading = true;
+    }
     _load();
   }
 
@@ -78,15 +94,20 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
   Future<void> _load() async {
     await _resolveRecording();
     await _loadCached();
+    if (mounted) setState(() => _metadataLoading = false);
   }
 
   /// Fetch real metadata by id — no fabricated SyncRecording.
   Future<void> _resolveRecording() async {
     if (_resolved != null) return; // already have it from the list
+    if (mounted) setState(() => _metadataLoading = true);
     final token = await widget.services.serverConfigRepository.readToken();
     final config = await widget.services.serverConfigRepository.readCurrent();
     if (token == null || token.isEmpty || config == null) return;
-    final client = DataApiClient.forConfig(config, token);
+    final client = (widget.clientFactory ?? DataApiClient.forConfig)(
+      config,
+      token,
+    );
     try {
       final byId = <String, SyncRecording>{};
       String? cursor;
@@ -291,43 +312,76 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
       appBar: AppBar(
         title: Text(rec?.patientName ?? rec?.filename ?? 'Consultation'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: _metadataLoading && rec == null
+          ? _buildMetadataLoading(scheme)
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (rec?.filename.isNotEmpty == true)
+                  Text(
+                    rec!.filename,
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                if (rec?.durationSeconds != null)
+                  Text(
+                    '${rec!.durationSeconds!.round()}s · updated ${_short(rec.updatedAt)}',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                if (_authNeedsAttention) ...[
+                  const SizedBox(height: 12),
+                  NoticeBanner(
+                    tone: AppStatusTone.error,
+                    text:
+                        'Pairing needs attention — documents may be unavailable.',
+                  ),
+                ] else if (_offline) ...[
+                  const SizedBox(height: 12),
+                  NoticeBanner(
+                    tone: AppStatusTone.warning,
+                    text: 'Offline · showing what is available on this phone.',
+                  ),
+                ],
+                if (_generateError != null) ...[
+                  const SizedBox(height: 12),
+                  NoticeBanner(
+                    tone: AppStatusTone.error,
+                    text: _generateError!,
+                    actionLabel: 'Dismiss',
+                    onAction: () => setState(() => _generateError = null),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                for (final doc in DocType.values) _docRow(doc),
+              ],
+            ),
+    );
+  }
+
+  /// Labelled loading state for the id-keyed entry — never a silent dark
+  /// screen (the §5A 'labelled progress' requirement).
+  Widget _buildMetadataLoading(ColorScheme scheme) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (rec?.filename.isNotEmpty == true)
-            Text(
-              rec!.filename,
-              style: TextStyle(color: scheme.onSurfaceVariant),
+          SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: scheme.primary,
             ),
-          if (rec?.durationSeconds != null)
-            Text(
-              '${rec!.durationSeconds!.round()}s · updated ${_short(rec.updatedAt)}',
-              style: TextStyle(color: scheme.onSurfaceVariant),
-            ),
-          if (_authNeedsAttention) ...[
-            const SizedBox(height: 12),
-            NoticeBanner(
-              tone: AppStatusTone.error,
-              text: 'Pairing needs attention — documents may be unavailable.',
-            ),
-          ] else if (_offline) ...[
-            const SizedBox(height: 12),
-            NoticeBanner(
-              tone: AppStatusTone.warning,
-              text: 'Offline · showing what is available on this phone.',
-            ),
-          ],
-          if (_generateError != null) ...[
-            const SizedBox(height: 12),
-            NoticeBanner(
-              tone: AppStatusTone.error,
-              text: _generateError!,
-              actionLabel: 'Dismiss',
-              onAction: () => setState(() => _generateError = null),
-            ),
-          ],
-          const SizedBox(height: 12),
-          for (final doc in DocType.values) _docRow(doc),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Opening consultation…',
+            style: TextStyle(fontSize: 15, color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Fetching from your office server.',
+            style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+          ),
         ],
       ),
     );
