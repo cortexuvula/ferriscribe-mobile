@@ -3,6 +3,9 @@ PODS:
   - flutter_secure_storage_darwin (10.0.0):
     - Flutter
     - FlutterMacOS
+  - local_auth_darwin (0.0.1):
+    - Flutter
+    - FlutterMacOS
   - mobile_scanner (7.0.0):
     - Flutter
     - FlutterMacOS
@@ -17,6 +20,7 @@ PODS:
 DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_secure_storage_darwin (from `.symlinks/plugins/flutter_secure_storage_darwin/darwin`)
+  - local_auth_darwin (from `.symlinks/plugins/local_auth_darwin/darwin`)
   - mobile_scanner (from `.symlinks/plugins/mobile_scanner/darwin`)
   - record_ios (from `.symlinks/plugins/record_ios/ios`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
@@ -27,6 +31,8 @@ EXTERNAL SOURCES:
     :path: Flutter
   flutter_secure_storage_darwin:
     :path: ".symlinks/plugins/flutter_secure_storage_darwin/darwin"
+  local_auth_darwin:
+    :path: ".symlinks/plugins/local_auth_darwin/darwin"
   mobile_scanner:
     :path: ".symlinks/plugins/mobile_scanner/darwin"
   record_ios:
@@ -39,6 +45,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_secure_storage_darwin: acdb3f316ed05a3e68f856e0353b133eec373a23
+  local_auth_darwin: c3ee6cce0a8d56be34c8ccb66ba31f7f180aaebb
   mobile_scanner: 9157936403f5a0644ca3779a38ff8404c5434a93
   record_ios: 390a30c7caaf8b5d0fb1cb1d2fd5064b48b4520c
   share_plus: 50da8cb520a8f0f65671c6c6a99b3617ed10a58a
