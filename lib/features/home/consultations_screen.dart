@@ -69,6 +69,11 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
     if (mounted) setState(() {});
   }
 
+  /// The holder's latest completed fact says unreachable — independent of
+  /// this screen's list state (drives the Tailscale alert early).
+  bool get _connectionUnreachable =>
+      widget.services.connection.last is Unreachable;
+
   @override
   void dispose() {
     widget.services.connection.removeListener(_onConnectionChanged);
@@ -241,10 +246,13 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
               ],
             ),
           ),
-          // V5 (user request): an unreachable server is never a silent
-          // offline label — name the cause and offer recovery, EVEN
-          // while cached consultations are shown below.
-          if (!_loading && _offline)
+          // V5 (user request) + visual review 8dd93c0: the Tailscale
+          // alert is driven by the CONNECTION RESULT, not by list
+          // completion — a fast failed probe shows the notice immediately
+          // even while the list pull is still loading (the old
+          // `_offline` gate left a bare 'Unreachable' label with no
+          // alert during the hang).
+          if (_connectionUnreachable)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
               child: NoticeBanner(

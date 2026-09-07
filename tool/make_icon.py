@@ -96,9 +96,17 @@ mdist = np.sqrt(
 )
 alpha = mono_em[:, :, 3] > 0
 ink = alpha & (mdist > 25)  # white strokes AND teal EKG both count
-mono = np.zeros((target_h, target_w, 4), dtype=np.uint8)
-mono[ink] = (255, 255, 255, 255)
-Image.fromarray(mono, "RGBA").save(os.path.join(OUT_DIR, "monochrome.png"))
+mono_emblem = np.zeros((target_h, target_w, 4), dtype=np.uint8)
+mono_emblem[ink] = (255, 255, 255, 255)
+# Same transparent 1024x1024 canvas + centering as the color foreground
+# (visual review 8dd93c0: a cropped 324x540 file gets STRETCHED across
+# the adaptive layer and clips under themed masks).
+mono_full = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+mono_full.paste(
+    Image.fromarray(mono_emblem, "RGBA"),
+    ((1024 - target_w) // 2, (1024 - target_h) // 2),
+)
+mono_full.save(os.path.join(OUT_DIR, "monochrome.png"))
 
 print(
     "adaptive layers written; emblem",
