@@ -70,11 +70,6 @@ IngestStage? knownServerStage(String stage) {
   }
 }
 
-/// Legacy mapper retained for callers that need a non-null result; unknown
-/// stages (incl. `unknown`) map to queued without inventing progress.
-IngestStage stageFromServer(String stage) =>
-    knownServerStage(stage) ?? IngestStage.queued;
-
 /// Orchestrates the ingest: create recording → upload audio → trigger SOAP
 /// generation → stream job stages over SSE.
 ///

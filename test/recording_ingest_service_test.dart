@@ -107,18 +107,6 @@ void main() {
     });
   });
 
-  group('stageFromServer', () {
-    test('maps the server vocabulary', () {
-      expect(stageFromServer('queued'), IngestStage.queued);
-      expect(stageFromServer('unknown'), IngestStage.queued);
-      expect(stageFromServer('transcribing'), IngestStage.transcribing);
-      expect(stageFromServer('generating_soap'), IngestStage.generatingSoap);
-      expect(stageFromServer('completed'), IngestStage.completed);
-      expect(stageFromServer('failed'), IngestStage.failed);
-      expect(stageFromServer('generating_referral'), IngestStage.queued);
-    });
-  });
-
   group('knownServerStage', () {
     test('unknown stages are null, not SOAP progress', () {
       expect(knownServerStage('generating_referral'), isNull);
