@@ -1,0 +1,245 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../../app_bootstrap.dart';
+import '../../core/api/models.dart';
+import 'document_editor_screen.dart';
+import 'document_service.dart';
+
+/// Per-recording view: five document types, each with generate / view-edit.
+class RecordingDetailScreen extends StatefulWidget {
+  const RecordingDetailScreen({
+    super.key,
+    required this.services,
+    required this.recording,
+  });
+
+  final AppServices services;
+  final SyncRecording recording;
+
+  @override
+  State<RecordingDetailScreen> createState() => _RecordingDetailScreenState();
+}
+
+class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
+  final DocumentService _service = DocumentService();
+
+  /// Which doc type is currently generating (drives the spinner).
+  DocType? _generating;
+  String? _generateError;
+  final Map<DocType, bool> _hasContent = {};
+
+  @override
+  void initState() {
+    super.initState();
+    for (final d in DocType.values) {
+      _hasContent[d] = widget.recording.hasDoc(d);
+    }
+  }
+
+  Future<void> _generate(DocType doc) async {
+    final request = await _requestFor(doc);
+    if (request == null) return;
+
+    final token = await widget.services.serverConfigRepository.readToken();
+    final config = await widget.services.serverConfigRepository.readCurrent();
+    if (token == null || token.isEmpty || config == null) {
+      _showError('Not paired.');
+      return;
+    }
+
+    setState(() {
+      _generating = doc;
+      _generateError = null;
+    });
+
+    StreamSubscription<String>? sub;
+    try {
+      sub = _service
+          .generate(config, token, widget.recording.id, doc, request)
+          .listen(
+            (stage) {
+              if (stage == 'completed' && mounted) {
+                setState(() {
+                  _hasContent[doc] = true;
+                  _generating = null;
+                });
+              }
+            },
+            onError: (Object _) {
+              if (mounted) {
+                setState(() {
+                  _generating = null;
+                  _generateError = 'Generation failed.';
+                });
+              }
+            },
+            onDone: () {
+              if (mounted && _generating == doc) {
+                setState(() => _generating = null);
+              }
+            },
+          );
+    } catch (_) {
+      if (mounted) setState(() => _generateError = 'Generation failed.');
+    } finally {
+      // Stream completes on its own; the listener manages state.
+      sub;
+    }
+  }
+
+  /// Builds the generate request for a doc type, prompting for required
+  /// fields (peer_discussion) via a dialog. Returns null if cancelled.
+  Future<GenerateRequest?> _requestFor(DocType doc) async {
+    if (doc == DocType.peerDiscussion) {
+      final result = await showPeerDiscussionForm(context);
+      if (result == null) return null;
+      return GenerateRequest(
+        physicianName: result[0],
+        specialty: result[1],
+        reason: result[2],
+      );
+    }
+    return const GenerateRequest();
+  }
+
+  void _openEditor(DocType doc) {
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<void>(
+            builder: (_) => DocumentEditorScreen(
+              services: widget.services,
+              recordingId: widget.recording.id,
+              doc: doc,
+            ),
+          ),
+        )
+        .then((_) {
+          // Refresh existence after a possible edit.
+          if (mounted) setState(() => _hasContent[doc] = true);
+        });
+  }
+
+  void _showError(String message) {
+    if (mounted) setState(() => _generateError = message);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rec = widget.recording;
+    return Scaffold(
+      appBar: AppBar(title: Text(rec.patientName ?? rec.filename)),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(rec.filename, style: const TextStyle(color: Colors.grey)),
+          if (rec.durationSeconds != null)
+            Text(
+              '${rec.durationSeconds!.round()}s · updated ${_short(rec.updatedAt)}',
+              style: const TextStyle(color: Colors.grey),
+            ),
+          if (_generateError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                _generateError!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          const SizedBox(height: 12),
+          for (final doc in DocType.values) _docTile(doc),
+        ],
+      ),
+    );
+  }
+
+  Widget _docTile(DocType doc) {
+    final has = _hasContent[doc] ?? false;
+    final generating = _generating == doc;
+    return Card(
+      child: ListTile(
+        leading: Icon(
+          has ? Icons.check_circle_outline : Icons.circle_outlined,
+          color: has ? Colors.green : null,
+        ),
+        title: Text(doc.label),
+        trailing: generating
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (has)
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined),
+                      tooltip: 'Edit',
+                      onPressed: () => _openEditor(doc),
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(Icons.auto_awesome_outlined),
+                      tooltip: 'Generate',
+                      onPressed: () => _generate(doc),
+                    ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  String _short(String rfc3339) {
+    if (rfc3339.length < 16) return rfc3339;
+    return rfc3339.substring(0, 16).replaceFirst('T', ' ');
+  }
+}
+
+/// Prompts for the three required peer-discussion fields. Returns
+/// `[physician, specialty, reason]` or null on cancel.
+Future<List<String>?> showPeerDiscussionForm(BuildContext context) {
+  final physician = TextEditingController();
+  final specialty = TextEditingController();
+  final reason = TextEditingController();
+  return showDialog<List<String>>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Peer discussion'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: physician,
+            decoration: const InputDecoration(labelText: 'Consultant name'),
+          ),
+          TextField(
+            controller: specialty,
+            decoration: const InputDecoration(labelText: 'Specialty'),
+          ),
+          TextField(
+            controller: reason,
+            decoration: const InputDecoration(labelText: 'Reason'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final p = physician.text.trim();
+            final s = specialty.text.trim();
+            final r = reason.text.trim();
+            if (p.isEmpty || s.isEmpty || r.isEmpty) return; // required
+            Navigator.pop(context, [p, s, r]);
+          },
+          child: const Text('Generate'),
+        ),
+      ],
+    ),
+  );
+}

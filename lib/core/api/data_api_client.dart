@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../core/app_logger.dart';
 import '../../pairing/server_config_repository.dart';
+import 'models.dart';
 
 /// A processing job's current state, as served by the server's in-memory
 /// job registry (`GET /v1/jobs/{id}`).
@@ -95,6 +96,8 @@ class DataApiClient {
         .post(
           Uri.parse('$baseUrl/v1/recordings'),
           headers: _headers,
+          // `?durationSeconds` is Dart's null-aware map entry: the key is
+          // omitted entirely when null (server treats the field as optional).
           body: jsonEncode({
             'id': id,
             'filename': filename,
@@ -189,6 +192,109 @@ class DataApiClient {
   }
 
   void close() => _client.close();
+
+  // ── Phase 2: content sync + documents ───────────────────────────────
+
+  /// `GET /v1/content/sync` — incremental delta pull.
+  ///
+  /// [since] is an RFC 3339 watermark (omit for the initial full pull).
+  /// Returns the page of recordings plus `has_more` for pagination.
+  Future<ContentPullPage> pullContent({String? since, int? limit}) async {
+    final uri = Uri.parse(
+      '$baseUrl/v1/content/sync',
+    ).replace(queryParameters: {'since': ?since, 'limit': ?limit?.toString()});
+    final resp = await _client
+        .get(uri, headers: {'Authorization': 'Bearer $token'})
+        .timeout(const Duration(seconds: 30));
+    AppLog.status('content.sync.pull', resp.statusCode);
+    if (resp.statusCode != 200) {
+      throw DataApiException(resp.statusCode, 'content sync pull failed');
+    }
+    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    final recordings = (body['recordings'] as List<dynamic>? ?? const [])
+        .map((r) => SyncRecording.fromJson(r as Map<String, dynamic>))
+        .toList();
+    AppLog.count('content.sync.recordings', recordings.length);
+    return ContentPullPage(
+      recordings: recordings,
+      serverTime: body['server_time'] as String? ?? '',
+      hasMore: body['has_more'] as bool? ?? false,
+    );
+  }
+
+  /// `GET /v1/recordings/{id}/documents/{doc_type}` — fetch one document.
+  /// `content` is null when the document has not been generated yet.
+  Future<RecordingDocument> getDocument(String recordingId, DocType doc) async {
+    final resp = await _client
+        .get(
+          Uri.parse(
+            '$baseUrl/v1/recordings/$recordingId/documents/${doc.wire}',
+          ),
+          headers: {'Authorization': 'Bearer $token'},
+        )
+        .timeout(const Duration(seconds: 15));
+    AppLog.status('document.get', resp.statusCode);
+    if (resp.statusCode != 200) {
+      throw DataApiException(resp.statusCode, 'get document failed');
+    }
+    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    return RecordingDocument.fromJson(doc, body);
+  }
+
+  /// `PUT /v1/recordings/{id}/documents/{doc_type}` — save an edited document
+  /// (204 on success).
+  Future<void> saveDocument(
+    String recordingId,
+    DocType doc,
+    String content,
+  ) async {
+    AppLog.count('document.put.chars', content.length);
+    final resp = await _client
+        .put(
+          Uri.parse(
+            '$baseUrl/v1/recordings/$recordingId/documents/${doc.wire}',
+          ),
+          headers: _headers,
+          body: jsonEncode({'content': content}),
+        )
+        .timeout(const Duration(seconds: 30));
+    AppLog.status('document.put', resp.statusCode);
+    if (resp.statusCode != 204) {
+      throw DataApiException(resp.statusCode, 'save document failed');
+    }
+  }
+
+  /// `POST /v1/recordings/{id}/generate/{doc_type}` — queue generation (202).
+  Future<void> generateDoc(
+    String recordingId,
+    DocType doc,
+    GenerateRequest request,
+  ) async {
+    final resp = await _client
+        .post(
+          Uri.parse('$baseUrl/v1/recordings/$recordingId/generate/${doc.wire}'),
+          headers: _headers,
+          body: jsonEncode(request.toJson()),
+        )
+        .timeout(const Duration(seconds: 15));
+    AppLog.status('generate.${doc.wire}', resp.statusCode);
+    if (resp.statusCode != 202) {
+      throw DataApiException(resp.statusCode, 'generate ${doc.wire} failed');
+    }
+  }
+}
+
+/// A page of content-sync pull results.
+class ContentPullPage {
+  const ContentPullPage({
+    required this.recordings,
+    required this.serverTime,
+    required this.hasMore,
+  });
+
+  final List<SyncRecording> recordings;
+  final String serverTime;
+  final bool hasMore;
 }
 
 /// Minimal SSE parser: the server emits `data: {json}\n\n` frames (axum
@@ -216,7 +322,10 @@ class SseParser {
     Stream<String> stream,
   ) async* {
     final data = <String>[];
-    await for (final line in stream) {
+    await for (var line in stream) {
+      // axum emits LF only, but strip a trailing CR defensively so the parser
+      // also tolerates CRLF SSE sources.
+      if (line.endsWith('\r')) line = line.substring(0, line.length - 1);
       if (line.isEmpty) {
         if (data.isNotEmpty) {
           final payload = data.join('\n');

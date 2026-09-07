@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app_bootstrap.dart';
 import '../../pairing/pairing_client.dart';
 import '../../pairing/server_config_repository.dart';
+import '../documents/recordings_screen.dart';
 import '../recording/record_screen.dart';
 
 /// Post-pairing home: shows the paired server, probes reachability, and lets
@@ -80,6 +81,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _openRecordings() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RecordingsScreen(services: widget.services),
+      ),
+    );
+  }
+
   Future<void> _unpair() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -152,6 +161,12 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: _record,
             icon: const Icon(Icons.mic),
             label: const Text('Record consultation'),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.tonalIcon(
+            onPressed: _openRecordings,
+            icon: const Icon(Icons.folder_outlined),
+            label: const Text('View recordings'),
           ),
           if (_probeResult != null) ...[
             const SizedBox(height: 12),
