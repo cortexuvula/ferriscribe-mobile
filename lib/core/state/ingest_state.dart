@@ -148,6 +148,11 @@ Future<IngestPresentation> reconcileIngest({
     }
     final acked = acknowledgedFromServerStage(snap.stage);
     if (acked == null) return prior;
+    // A live job at any stage ≥ queued structurally implies both acks: the
+    // registry only knows this recording because the create returned 201
+    // and the generate call returned 202 (a job cannot be transcribing
+    // without uploaded audio). Setting both true here is an INFERENCE from
+    // server state, not a guess — do not "simplify" by dropping it.
     return IngestPresentation(
       lastAcknowledgedStage: acked,
       recordingId: rid,
