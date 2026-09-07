@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'app_bootstrap.dart';
 import 'features/home/consultations_screen.dart';
 import 'features/pairing/pairing_screen.dart';
+import 'features/lock/app_lock_overlay.dart';
 import 'features/lock/app_lock_screen.dart';
 import 'features/settings/settings_screen.dart' show ThemeControllerScope;
 import 'security/app_lock.dart';
@@ -128,32 +129,62 @@ class _AppShellState extends State<_AppShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _mask.didChangeAppLifecycleState(state);
-    // Re-lock on resume: a physician can hand the phone off while the
-    // app is foregrounded — that's the gap the lock exists to close.
+    // Codie review: the SYSTEM AUTH DIALOG fires its own inactive/
+    // resumed pair. Treating those as backgrounding re-locks right after
+    // a successful unlock (double prompt) — so while a prompt is up (or
+    // settling), we do not record a backgrounding instant.
+    final promptActive =
+        widget.lock.authenticating || _promptSettlingUntil != null;
+    final now = DateTime.now();
+    final settling = _promptSettlingUntil;
+    if (settling != null && now.isAfter(settling)) {
+      _promptSettlingUntil = null;
+    }
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused) {
-      _pausedAt ??= DateTime.now();
+      if (!widget.lock.authenticating) {
+        _pausedAt ??= now;
+      }
     } else if (state == AppLifecycleState.resumed) {
+      if (widget.lock.authenticating) {
+        // The prompt dismissed -> this resume is the prompt's own.
+        _promptSettlingUntil = now.add(const Duration(seconds: 2));
+        _pausedAt = null;
+        return;
+      }
+      final settlingStill = _promptSettlingUntil != null;
       final away = _pausedAt;
       _pausedAt = null;
-      if (widget.lock.relockOnResume && away != null) {
+      if (widget.lock.relockOnResume &&
+          away != null &&
+          !settlingStill &&
+          !promptActive) {
         widget.lock.lock();
         widget.lock.tryUnlock(widget.auth);
       }
     }
   }
 
+  DateTime? _promptSettlingUntil;
+
   @override
   Widget build(BuildContext context) {
     return AppPrivacyShield(
       masked: _mask.masked,
-      child: widget.lock.locked
-          ? AppLockScreen(
-              lock: widget.lock,
-              auth: widget.auth,
-              canAuthenticate: widget.canAuthenticate,
-            )
-          : widget.child,
+      // Codie review: OVERLAY the lock — replacing the child would
+      // dispose the Navigator and every route's State (unsaved editor
+      // drafts, active RecordingController) on re-lock. The app subtree
+      // stays mounted under the lock; AppLockOverlay excludes it from
+      // touch, focus, semantics, and back-navigation while locked.
+      child: AppLockOverlay(
+        locked: widget.lock.locked,
+        lockScreen: AppLockScreen(
+          lock: widget.lock,
+          auth: widget.auth,
+          canAuthenticate: widget.canAuthenticate,
+        ),
+        child: widget.child,
+      ),
     );
   }
 }
@@ -171,6 +202,8 @@ class _RootScreen extends StatefulWidget {
 class _RootScreenState extends State<_RootScreen> {
   bool? _paired;
 
+  AppLockController? _subscribedLock;
+
   @override
   void initState() {
     super.initState();
@@ -181,8 +214,16 @@ class _RootScreenState extends State<_RootScreen> {
     if (lock == null || !lock.locked) {
       _load();
     } else {
+      _subscribedLock = lock;
       lock.addListener(_onLockUnlocked);
     }
+  }
+
+  @override
+  void dispose() {
+    // Codie review: no listener leak if disposed while still locked.
+    _subscribedLock?.removeListener(_onLockUnlocked);
+    super.dispose();
   }
 
   void _onLockUnlocked() {

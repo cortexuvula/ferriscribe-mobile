@@ -81,8 +81,10 @@ void main() {
     final auth = _FakeAuth(99); // always fails
     final s = services(auth);
     await tester.pumpWidget(FerriScribeApp(services: s));
+    // Bounded pumps: the lock screen's progress indicator animates
+    // forever, so pumpAndSettle would time out.
     await tester.pump();
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('FerriScribe is locked'), findsOneWidget);
     expect(
