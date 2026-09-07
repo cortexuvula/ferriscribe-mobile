@@ -310,7 +310,16 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: Text(rec?.patientName ?? rec?.filename ?? 'Consultation'),
+        // Null-OR-empty fallback on both: shell recordings can carry an
+        // empty-string filename (and an empty-string patient name), which
+        // ?? does not catch.
+        title: Text(
+          (rec?.patientName != null && rec!.patientName!.isNotEmpty)
+              ? rec.patientName!
+              : (rec?.filename.isNotEmpty == true)
+              ? rec!.filename
+              : 'Consultation',
+        ),
       ),
       body: _metadataLoading && rec == null
           ? _buildMetadataLoading(scheme)
@@ -327,6 +336,13 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
                     '${rec!.durationSeconds!.round()}s · updated ${_short(rec.updatedAt)}',
                     style: TextStyle(color: scheme.onSurfaceVariant),
                   ),
+                // Empty-shell recording (no name, no metadata, nothing
+                // cached, nothing generated): a clear message instead of a
+                // sparse near-blank list.
+                if (!_hasAnyContent && rec != null) ...[
+                  const SizedBox(height: 24),
+                  _buildEmptyShell(scheme),
+                ],
                 if (_authNeedsAttention) ...[
                   const SizedBox(height: 12),
                   NoticeBanner(
@@ -383,6 +399,45 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
             style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Whether anything user-visible exists: any server doc, any cached doc,
+  /// or any generation in flight. Empty-shell recordings get a message.
+  bool get _hasAnyContent =>
+      _generating != null ||
+      _serverHas.values.any((v) => v) ||
+      (_cached?.available.isNotEmpty ?? false);
+
+  /// §5F/§5A: an explicit empty state for a consultation with no documents.
+  Widget _buildEmptyShell(ColorScheme scheme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Column(
+          children: [
+            Icon(
+              Icons.description_outlined,
+              size: 48,
+              color: scheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'No documents yet for this consultation',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Generate a document below, or record a new consultation.',
+              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
       ),
     );
   }
