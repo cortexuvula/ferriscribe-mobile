@@ -10,6 +10,8 @@
 	<string>FerriScribe</string>
 	<key>NSCameraUsageDescription</key>
 	<string>FerriScribe uses the camera to scan the pairing QR code shown in the desktop app.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>FerriScribe uses the microphone to record the consultation audio sent to your local server.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

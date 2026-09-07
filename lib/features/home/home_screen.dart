@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app_bootstrap.dart';
 import '../../pairing/pairing_client.dart';
 import '../../pairing/server_config_repository.dart';
+import '../recording/record_screen.dart';
 
 /// Post-pairing home: shows the paired server, probes reachability, and lets
 /// the user unpair.
@@ -71,6 +72,14 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _record() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RecordScreen(services: widget.services),
+      ),
+    );
+  }
+
   Future<void> _unpair() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -137,6 +146,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   )
                 : const Icon(Icons.wifi_tethering),
             label: const Text('Probe server'),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: _record,
+            icon: const Icon(Icons.mic),
+            label: const Text('Record consultation'),
           ),
           if (_probeResult != null) ...[
             const SizedBox(height: 12),
