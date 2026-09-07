@@ -8,6 +8,7 @@ import '../../pairing/server_config_repository.dart';
 import '../../core/state/document_state.dart';
 import '../../core/state/presentation_adapters.dart';
 import '../../ui/components/status.dart';
+import '../export/export_service.dart';
 import 'document_service.dart';
 
 /// Reader + editor for one document (§5G) — the central clinical surface.
@@ -232,6 +233,110 @@ class _DocumentEditorScreenState extends State<DocumentEditorScreen> {
     ).showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
   }
 
+  bool _exporting = false;
+  final ExportService _exportService = ExportService();
+
+  /// Export & share (§5G secondary / §5I sheet). From a dirty edit, never
+  /// export the server's older text while implying it contains local
+  /// edits: offer Save & export or Keep editing.
+  Future<void> _export() async {
+    if (_exporting) return;
+    if (_offlineEntry) return; // no export while offline (§5G banner)
+    if (_dirty) {
+      final action = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Unsaved changes'),
+          content: const Text(
+            'Export uses the saved document. Save your edits first, or keep '
+            'editing.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'keep'),
+              child: const Text('Keep editing'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, 'save'),
+              child: const Text('Save & export'),
+            ),
+          ],
+        ),
+      );
+      if (action != 'save') return;
+      await _save();
+      if (_saveStatus != _SaveStatus.saved) return; // save failed — no export
+    }
+
+    if (!mounted) return;
+    // ignore: use_build_context_synchronously — guarded above
+    final format = await showModalBottomSheet<ExportFormat>(
+      context: context,
+      // 24dp upper corners (§5I).
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.doc.label,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Choose a trusted destination. Shared files may be stored '
+                'outside FerriScribe.',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: Theme.of(sheetContext).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              for (final f in ExportFormat.values)
+                ListTile(
+                  title: Text(f.label),
+                  contentPadding: EdgeInsets.zero,
+                  onTap: () => Navigator.pop(sheetContext, f),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (format == null) return; // cancel before download: unchanged (§5I)
+
+    final token = await widget.services.serverConfigRepository.readToken();
+    final config = await widget.services.serverConfigRepository.readCurrent();
+    if (token == null || token.isEmpty || config == null) return;
+
+    setState(() => _exporting = true);
+    final outcome = await _exportService.exportAndShare(
+      config: config,
+      token: token,
+      recordingId: widget.recordingId,
+      doc: widget.doc,
+      format: format,
+    );
+    if (!mounted) return;
+    setState(() => _exporting = false);
+    // No 'Sent'/'Delivered' claim (§5I): cancellation returns quietly;
+    // failures surface inline.
+    if (!outcome.ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(outcome.error ?? 'Export failed.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -251,12 +356,24 @@ class _DocumentEditorScreenState extends State<DocumentEditorScreen> {
           actions: [
             if (_loading == false && _loadError == null && !_authNeedsAttention)
               if (!_editing) ...[
-                // Reader actions (§5G): Edit primary, explicit Copy.
+                // Reader actions (§5G): explicit Copy; Export & share.
                 IconButton(
                   icon: const Icon(Icons.copy_outlined),
                   tooltip: 'Copy text',
                   onPressed: _copy,
                 ),
+                if (!_offlineEntry)
+                  IconButton(
+                    icon: _exporting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.share_outlined),
+                    tooltip: 'Export & share',
+                    onPressed: _exporting ? null : _export,
+                  ),
                 if (!_offlineEntry)
                   TextButton(
                     onPressed: _startEditing,

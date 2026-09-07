@@ -52,4 +52,33 @@ class PatientContext {
     'allergiesJson': jsonEncode(allergies),
     'priorSoapNotesJson': jsonEncode(priorSoapNotes),
   };
+
+  /// Value equality — an unchanged form is NOT dirty (the §5C discard
+  /// guard compares against the initial context).
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PatientContext &&
+          other.patientName == patientName &&
+          _listEq(other.medications, medications) &&
+          _listEq(other.conditions, conditions) &&
+          _listEq(other.allergies, allergies) &&
+          _listEq(other.priorSoapNotes, priorSoapNotes);
+
+  @override
+  int get hashCode => Object.hash(
+    patientName,
+    Object.hashAll(medications),
+    Object.hashAll(conditions),
+    Object.hashAll(allergies),
+    Object.hashAll(priorSoapNotes),
+  );
+
+  static bool _listEq(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 }
