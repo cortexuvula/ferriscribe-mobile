@@ -70,6 +70,43 @@ class ConnectionStateAdapter {
     }
   }
 
+  /// §5B mandatory preflight: an AUTHENTICATED check that proves both
+  /// reachability and pairing validity before recording starts.
+  ///
+  /// Uses `GET /v1/jobs/{id}` with a well-formed id that can never exist:
+  /// the server's authorize() runs before the handler, so 404 means the
+  /// bearer token was ACCEPTED (a bad token would 401 before routing).
+  /// 2xx/404 → Connected{authenticatedRead, authOk: true}; 401/403 →
+  /// AuthFailure; network error → Unreachable. No new server API.
+  Future<ConnectionState> authenticatedCheck({
+    required ServerConfig config,
+    required String token,
+  }) async {
+    // Nil UUID v4 variant bits — valid format, cannot collide with real ids.
+    const probeId = '00000000-0000-4000-8000-000000000000';
+    final client = DataApiClient.forConfig(config, token);
+    try {
+      // Any answer — 404 (no such job), a snapshot, anything — proves auth
+      // passed: the server's authorize() runs before the job handler.
+      await client.jobStatus(probeId);
+      return Connected(
+        checkedAt: DateTime.now(),
+        kind: ConnectionCheckKind.authenticatedRead,
+        authOk: true,
+        serverVersion: null,
+      );
+    } on DataApiException catch (e) {
+      return fromAuthenticatedRead(
+        previous: ConnectionUnknown(checkedAt: DateTime.now()),
+        statusCode: e.statusCode,
+      );
+    } catch (e) {
+      return Unreachable(checkedAt: DateTime.now(), reason: e.toString());
+    } finally {
+      client.close();
+    }
+  }
+
   /// Fold the outcome of an authenticated data-API call into a state.
   ConnectionState fromAuthenticatedRead({
     required ConnectionState previous,

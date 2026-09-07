@@ -346,6 +346,71 @@ void main() {
     });
   });
 
+  group('ConnectionStateAdapter.authenticatedCheck (§5B preflight)', () {
+    late HttpServer server;
+    late ServerConfig config;
+
+    setUp(() async {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      config = ServerConfig(
+        label: 'phone',
+        host: '127.0.0.1',
+        pairingPort: 11436,
+        dataPort: server.port,
+        pairedAt: DateTime(2026, 9, 7),
+      );
+    });
+
+    tearDown(() => server.close(force: true));
+
+    test('404 on the probe id means authorized: authOk true', () async {
+      server.listen((req) async {
+        // authorize() runs before the handler; reaching 404 proves the
+        // bearer was accepted.
+        final auth = req.headers.value('authorization');
+        req.response.statusCode = auth == 'Bearer good' ? 404 : 401;
+        await req.response.close();
+      });
+      final state = await ConnectionStateAdapter().authenticatedCheck(
+        config: config,
+        token: 'good',
+      );
+      expect(state, isA<Connected>());
+      expect((state as Connected).authOk, isTrue);
+      expect(state.kind, ConnectionCheckKind.authenticatedRead);
+    });
+
+    test('401 is AuthFailure, not offline', () async {
+      server.listen((req) async {
+        req.response.statusCode = 401;
+        await req.response.close();
+      });
+      final state = await ConnectionStateAdapter().authenticatedCheck(
+        config: config,
+        token: 'revoked',
+      );
+      expect(state, isA<AuthFailure>());
+    });
+
+    test('network failure is Unreachable', () async {
+      // Bind then close: nothing listening.
+      final dead = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final deadPort = dead.port;
+      await dead.close(force: true);
+      final state = await ConnectionStateAdapter().authenticatedCheck(
+        config: ServerConfig(
+          label: 'phone',
+          host: '127.0.0.1',
+          pairingPort: 11436,
+          dataPort: deadPort,
+          pairedAt: DateTime(2026, 9, 7),
+        ),
+        token: 'any',
+      );
+      expect(state, isA<Unreachable>());
+    });
+  });
+
   group('DocumentStateAdapter.save: ack split (REVIEW pin)', () {
     test(
       'server 204 + failing cache write => saved, cacheWritten false',

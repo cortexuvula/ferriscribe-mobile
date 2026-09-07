@@ -72,11 +72,34 @@ class _RecordScreenState extends State<RecordScreen> {
 
   // ── Preparation ───────────────────────────────────────────────────────
 
-  Future<void> _checkConnection() async {
+  /// §5B mandatory preflight: an AUTHENTICATED check runs automatically on
+  /// entering preparation — before the user can press Start — and on retry.
+  /// Start is enabled only when it proved both reachability and pairing.
+  @override
+  void initState() {
+    super.initState();
+    _preflight();
+  }
+
+  Future<void> _preflight() async {
     final config = await widget.services.serverConfigRepository.readCurrent();
-    if (config == null) return;
-    setState(() => _checking = true);
-    final state = await ConnectionStateAdapter().check(config: config);
+    final token = await widget.services.serverConfigRepository.readToken();
+    if (config == null || token == null || token.isEmpty) {
+      if (mounted) {
+        setState(
+          () => _connection = conn.Unreachable(
+            checkedAt: DateTime.now(),
+            reason: 'not paired',
+          ),
+        );
+      }
+      return;
+    }
+    if (mounted) setState(() => _checking = true);
+    final state = await ConnectionStateAdapter().authenticatedCheck(
+      config: config,
+      token: token,
+    );
     if (mounted) {
       setState(() {
         _connection = state;
@@ -84,6 +107,9 @@ class _RecordScreenState extends State<RecordScreen> {
       });
     }
   }
+
+  /// Manual Check button — same authenticated preflight.
+  Future<void> _checkConnection() => _preflight();
 
   Future<void> _editContext() async {
     final result = await showPatientContextForm(
@@ -498,7 +524,10 @@ class _RecordScreenState extends State<RecordScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              'Check the connection before recording.',
+              _checking
+                  ? 'Checking your office server before recording…'
+                  : 'A successful connection check is required before '
+                        'recording. Tap Check to try again.',
               style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
             ),
           ),
@@ -506,11 +535,12 @@ class _RecordScreenState extends State<RecordScreen> {
     );
   }
 
-  /// Start requires a reachable or auth-ok connection (or no check yet —
-  /// the check is optional but a FAILED one blocks, per §5B).
+  /// §5B mandatory preflight: Start requires a state that proves BOTH
+  /// reachability AND accepted pairing (`authOk: true` — only an
+  /// authenticated read sets it). No-check-yet does NOT allow start.
   bool get _startEnabled => switch (_connection) {
-    conn.Unreachable() || conn.AuthFailure() => false,
-    _ => true,
+    conn.Connected(:final authOk) => authOk,
+    _ => false,
   };
 
   Widget _connectionRow(ColorScheme scheme) {
@@ -524,9 +554,10 @@ class _RecordScreenState extends State<RecordScreen> {
     } else if (state is conn.Connected) {
       content = StatusLine(
         tone: AppStatusTone.success,
-        text:
-            'Office server reachable'
-            '${state.serverVersion != null ? ' · v${state.serverVersion}' : ''}',
+        text: state.authOk
+            ? 'Connected to your office server'
+            : 'Office server reachable'
+                  '${state.serverVersion != null ? ' · v${state.serverVersion}' : ''}',
       );
     } else if (state is conn.AuthFailure) {
       content = const StatusLine(
