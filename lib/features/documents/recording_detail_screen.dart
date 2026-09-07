@@ -499,10 +499,19 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
           child: Icon(Icons.auto_awesome_outlined, size: 20),
         );
       }
-      return TextButton.icon(
-        onPressed: _generating == null ? () => _generate(doc) : null,
-        icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-        label: const Text('Generate'),
+      // Constrained: on a phone-width tile (412dp), an unconstrained
+      // TextButton.icon here blows the ListTile trailing contract
+      // ('trailing widget consumes the entire tile width'), which throws
+      // during layout and leaves the whole route unpainted — the device
+      // 'blank screen'. The label is short and fixed; 120dp is ample and
+      // can never consume the tile.
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 120),
+        child: TextButton.icon(
+          onPressed: _generating == null ? () => _generate(doc) : null,
+          icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+          label: const Text('Generate'),
+        ),
       );
     }
     if (state == _DocRowState.cachedOnly && _offline) {
