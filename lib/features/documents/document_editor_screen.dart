@@ -179,9 +179,20 @@ class _DocumentEditorScreenState extends State<DocumentEditorScreen> {
                 maxLines: null,
                 expands: true,
                 textAlignVertical: TextAlignVertical.top,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
+                // Explicit contrast: the editor is the core clinical surface,
+                // so text/hint colors are pinned to the color scheme rather
+                // than left to defaults in either theme.
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: 15,
+                  height: 1.5,
+                ),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
                   hintText: 'Not generated yet',
+                  hintStyle: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 onChanged: (_) => setState(() => _dirty = true),
               ),

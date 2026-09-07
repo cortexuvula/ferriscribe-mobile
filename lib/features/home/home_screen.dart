@@ -33,7 +33,6 @@ class _HomeScreenState extends State<HomeScreen> {
   ServerConfig? _config;
   bool _probing = false;
   String? _probeResult;
-  bool _connectionExpanded = false;
 
   @override
   void initState() {
@@ -187,69 +186,80 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // ── Connection — collapsible ───────────────────────────────
-          const SizedBox(height: 20),
-          InkWell(
-            onTap: () =>
-                setState(() => _connectionExpanded = !_connectionExpanded),
-            child: _SectionHeader(
-              title: 'Connection',
-              scheme: scheme,
-              trailing: Icon(
-                _connectionExpanded ? Icons.expand_less : Icons.expand_more,
-                size: 18,
-                color: scheme.primary,
+          // ── Connection — collapsible (ExpansionTile: ≥48dp target,
+          // accessible expanded/collapsed semantics) ───────────────
+          Theme(
+            // Remove ExpansionTile's default divider — we render our own.
+            data: Theme.of(
+              context,
+            ).copyWith(dividerTheme: const DividerThemeData(color: null)),
+            child: ExpansionTile(
+              initiallyExpanded: false,
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              dense: false,
+              title: Text(
+                'Connection',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.primary,
+                  letterSpacing: 0.5,
+                ),
               ),
-            ),
-          ),
-          if (_connectionExpanded) ...[
-            const SizedBox(height: 8),
-            if (_config != null) ...[
-              _Row(label: 'Server', value: _config!.host, scheme: scheme),
-              _Row(label: 'Label', value: _config!.label, scheme: scheme),
-            ],
-            _Row(
-              label: 'Bearer token',
-              value: _hasToken ? 'stored' : 'missing',
-              scheme: scheme,
-            ),
-            const SizedBox(height: 8),
-            Row(
+              iconColor: scheme.primary,
+              collapsedIconColor: scheme.primary,
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _probing ? null : _probe,
-                    icon: _probing
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.wifi_tethering, size: 18),
-                    label: const Text('Probe server'),
+                if (_config != null) ...[
+                  _Row(label: 'Server', value: _config!.host, scheme: scheme),
+                  _Row(label: 'Label', value: _config!.label, scheme: scheme),
+                ],
+                _Row(
+                  label: 'Bearer token',
+                  value: _hasToken ? 'stored' : 'missing',
+                  scheme: scheme,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _probing ? null : _probe,
+                        icon: _probing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.wifi_tethering, size: 18),
+                        label: const Text('Probe server'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      onPressed: _unpair,
+                      icon: const Icon(Icons.link_off, size: 18),
+                      label: const Text('Unpair'),
+                    ),
+                  ],
+                ),
+                if (_probeResult != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _probeResult!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _probeResult!.startsWith('Unreachable')
+                          ? scheme.error
+                          : scheme.primary,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                OutlinedButton.icon(
-                  onPressed: _unpair,
-                  icon: const Icon(Icons.link_off, size: 18),
-                  label: const Text('Unpair'),
-                ),
+                ],
               ],
             ),
-            if (_probeResult != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                _probeResult!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _probeResult!.startsWith('Unreachable')
-                      ? scheme.error
-                      : scheme.primary,
-                ),
-              ),
-            ],
-          ],
+          ),
           const SizedBox(height: 40),
         ],
       ),
@@ -259,15 +269,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
 /// Simple section header with a tinted rule.
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.title,
-    required this.scheme,
-    this.trailing,
-  });
+  const _SectionHeader({required this.title, required this.scheme});
 
   final String title;
   final ColorScheme scheme;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -284,7 +289,6 @@ class _SectionHeader extends StatelessWidget {
             letterSpacing: 0.5,
           ),
         ),
-        if (trailing != null) ...[const SizedBox(width: 4), trailing!],
         const SizedBox(width: 12),
         Expanded(child: Divider(color: scheme.outlineVariant, height: 1)),
       ],
