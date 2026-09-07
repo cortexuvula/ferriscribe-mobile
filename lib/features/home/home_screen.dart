@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app.dart';
 import '../../app_bootstrap.dart';
 import '../../core/api/data_api_client.dart';
 import '../../pairing/pairing_client.dart';
@@ -7,17 +8,21 @@ import '../../pairing/server_config_repository.dart';
 import '../documents/recordings_screen.dart';
 import '../recording/record_screen.dart';
 
-/// Post-pairing home: shows the paired server, probes reachability, and lets
-/// the user unpair.
+/// Post-pairing home: recording actions first, then a collapsible Connection
+/// section with server diagnostics + Appearance menu.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     required this.services,
     required this.onUnpaired,
+    required this.themeOption,
+    required this.onSetTheme,
   });
 
   final AppServices services;
   final VoidCallback onUnpaired;
+  final ThemeModeOption themeOption;
+  final ValueChanged<ThemeModeOption> onSetTheme;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -28,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ServerConfig? _config;
   bool _probing = false;
   String? _probeResult;
+  bool _connectionExpanded = false;
 
   @override
   void initState() {
@@ -115,9 +121,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (confirmed != true) return;
 
-    // Best-effort self-revocation: tell the server to revoke this token.
-    // If the server is unreachable, we still clear local state — the token
-    // becomes orphaned and the desktop admin can revoke it manually.
     final token = await widget.services.serverConfigRepository.readToken();
     final config = await widget.services.serverConfigRepository.readCurrent();
     if (token != null && token.isNotEmpty && config != null) {
@@ -135,90 +138,182 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final config = _config;
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('FerriScribe')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Icon(Icons.health_and_safety_outlined, size: 64),
+          // ── Recording actions — primary ────────────────────────────
           const SizedBox(height: 8),
-          const Center(
-            child: Text(
-              'Paired to office server',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-          ),
-          const SizedBox(height: 24),
-          if (config != null) ...[
-            _Row(label: 'Device label', value: config.label),
-            _Row(label: 'Host', value: config.host),
-            _Row(label: 'Pairing port', value: '${config.pairingPort}'),
-            _Row(label: 'Data port', value: '${config.dataPort}'),
-            _Row(
-              label: 'Paired at',
-              value: config.pairedAt.toLocal().toString(),
-            ),
-          ],
-          _Row(label: 'Bearer token', value: _hasToken ? 'stored' : 'missing'),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: _probing ? null : _probe,
-            icon: _probing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.wifi_tethering),
-            label: const Text('Probe server'),
-          ),
-          const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: _record,
             icon: const Icon(Icons.mic),
             label: const Text('Record consultation'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           FilledButton.tonalIcon(
             onPressed: _openRecordings,
             icon: const Icon(Icons.folder_outlined),
             label: const Text('View recordings'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+            ),
           ),
-          if (_probeResult != null) ...[
-            const SizedBox(height: 12),
-            Text(_probeResult!, textAlign: TextAlign.center),
+
+          // ── Appearance ─────────────────────────────────────────────
+          const SizedBox(height: 28),
+          _SectionHeader(title: 'Appearance', scheme: scheme),
+          const SizedBox(height: 8),
+          RadioGroup<ThemeModeOption>(
+            groupValue: widget.themeOption,
+            onChanged: (v) {
+              if (v != null) widget.onSetTheme(v);
+            },
+            child: Column(
+              children: [
+                for (final o in ThemeModeOption.values)
+                  RadioListTile<ThemeModeOption>(
+                    value: o,
+                    title: Text(o.label),
+                    secondary: Icon(o.icon, size: 20, color: scheme.primary),
+                    dense: true,
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
+            ),
+          ),
+
+          // ── Connection — collapsible ───────────────────────────────
+          const SizedBox(height: 20),
+          InkWell(
+            onTap: () =>
+                setState(() => _connectionExpanded = !_connectionExpanded),
+            child: _SectionHeader(
+              title: 'Connection',
+              scheme: scheme,
+              trailing: Icon(
+                _connectionExpanded ? Icons.expand_less : Icons.expand_more,
+                size: 18,
+                color: scheme.primary,
+              ),
+            ),
+          ),
+          if (_connectionExpanded) ...[
+            const SizedBox(height: 8),
+            if (_config != null) ...[
+              _Row(label: 'Server', value: _config!.host, scheme: scheme),
+              _Row(label: 'Label', value: _config!.label, scheme: scheme),
+            ],
+            _Row(
+              label: 'Bearer token',
+              value: _hasToken ? 'stored' : 'missing',
+              scheme: scheme,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _probing ? null : _probe,
+                    icon: _probing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.wifi_tethering, size: 18),
+                    label: const Text('Probe server'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  onPressed: _unpair,
+                  icon: const Icon(Icons.link_off, size: 18),
+                  label: const Text('Unpair'),
+                ),
+              ],
+            ),
+            if (_probeResult != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _probeResult!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _probeResult!.startsWith('Unreachable')
+                      ? scheme.error
+                      : scheme.primary,
+                ),
+              ),
+            ],
           ],
-          const SizedBox(height: 24),
-          OutlinedButton.icon(
-            onPressed: _unpair,
-            icon: const Icon(Icons.link_off),
-            label: const Text('Unpair this device'),
-          ),
+          const SizedBox(height: 40),
         ],
       ),
     );
   }
 }
 
+/// Simple section header with a tinted rule.
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.title,
+    required this.scheme,
+    this.trailing,
+  });
+
+  final String title;
+  final ColorScheme scheme;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: Divider(color: scheme.outlineVariant, height: 1)),
+        const SizedBox(width: 12),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: scheme.primary,
+            letterSpacing: 0.5,
+          ),
+        ),
+        if (trailing != null) ...[const SizedBox(width: 4), trailing!],
+        const SizedBox(width: 12),
+        Expanded(child: Divider(color: scheme.outlineVariant, height: 1)),
+      ],
+    );
+  }
+}
+
 class _Row extends StatelessWidget {
-  const _Row({required this.label, required this.value});
+  const _Row({required this.label, required this.value, required this.scheme});
 
   final String label;
   final String value;
+  final ColorScheme scheme;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
-            child: Text(label, style: const TextStyle(color: Colors.grey)),
+            width: 100,
+            child: Text(
+              label,
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+            ),
           ),
-          Expanded(child: Text(value)),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
         ],
       ),
     );
