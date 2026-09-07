@@ -30,6 +30,14 @@ class ConnectionHolder extends ChangeNotifier {
   /// network latency.
   int _epoch = 0;
 
+  /// Epochs of checks still in flight. A completion clears its own entry;
+  /// `checking` is true while any entry remains. This keeps a completed
+  /// probe's result even when a second check (e.g. the list sync) started
+  /// after it — visual review 33fcdfa: the launch probe's publish was
+  /// dropped because the sync fold's beginCheck invalidated its epoch,
+  /// freezing the label on 'Checking…'.
+  final Set<int> _pending = {};
+
   /// The most recent completed check, if any. Null means never checked —
   /// rendered as 'connection not checked'.
   ConnectionState? get last => _last;
@@ -41,21 +49,44 @@ class ConnectionHolder extends ChangeNotifier {
   /// Publish a completed check. `ConnectionChecking` should not be pushed
   /// here — use [beginCheck] instead.
   ///
-  /// [epoch] (from [beginCheck]) rejects superseded completions: pass the
-  /// epoch captured when the check started and a publish for an older
-  /// epoch is a no-op.
+  /// [epoch] (from [beginCheck]) rejects superseded completions: an epoch
+  /// is superseded only when a NEWER check has already PUBLISHED (not
+  /// merely started) — starting a second concurrent check no longer
+  /// invalidates the first (both are in flight; each publishes its own
+  /// result in completion order, which is last-writer-wins by network
+  /// latency but never rolls back past a *published* newer fact).
   void publish(ConnectionState state, {int? epoch}) {
     if (state is ConnectionChecking) {
       beginCheck();
       return;
     }
-    if (epoch != null && epoch != _epoch) {
-      return; // a newer check already published — stay at the newer truth
+    if (epoch != null) {
+      // Superseded = a NEWER epoch has already published (its result is
+      // newer evidence). An epoch that merely STARTED later doesn't
+      // invalidate this one while both are in flight — each publishes in
+      // completion order.
+      final newestPublished = _publishedEpochs.isEmpty
+          ? 0
+          : _publishedEpochs.reduce((x, y) => x > y ? x : y);
+      if (epoch <= newestPublished) {
+        return; // this completion was already superseded by a newer publish
+      }
+      _pending.remove(epoch);
+      _publishedEpochs
+        ..clear()
+        ..add(epoch);
+    } else {
+      // Legacy epoch-less publish: unconditionally the newest truth.
+      _pending.clear();
+      _publishedEpochs.clear();
     }
     _last = state;
-    _checking = false;
+    _checking = _pending.isNotEmpty;
     notifyListeners();
   }
+
+  /// Epochs that have published (kept to just the newest).
+  final Set<int> _publishedEpochs = {};
 
   /// Mark a check as in flight. The previous completed fact is kept for
   /// progressive UI ('Checking…' + last-known state).
@@ -63,6 +94,7 @@ class ConnectionHolder extends ChangeNotifier {
   /// [publish] so a superseded completion can't overwrite a newer fact.
   int beginCheck() {
     _epoch++;
+    _pending.add(_epoch);
     _checking = true;
     notifyListeners();
     return _epoch;

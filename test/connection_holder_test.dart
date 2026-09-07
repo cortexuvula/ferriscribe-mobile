@@ -160,6 +160,57 @@ void main() {
       expect((h.last as Connected).authOk, isTrue);
     });
 
+    test('concurrent in-flight checks each publish (visual review 33fcdfa: '
+        'launch probe no longer invalidated by the sync fold starting)', () {
+      final h = ConnectionHolder();
+      // Launch probe starts, then the list sync starts BEFORE the probe
+      // completes (both in flight).
+      final probeEpoch = h.beginCheck();
+      final syncEpoch = h.beginCheck();
+
+      // The probe completes first with 'reachable'.
+      h.publish(
+        Connected(
+          checkedAt: DateTime.now(),
+          kind: ConnectionCheckKind.probe,
+          authOk: false,
+        ),
+        epoch: probeEpoch,
+      );
+      expect(h.last, isA<Connected>(), reason: 'probe result preserved');
+      expect(h.checking, isTrue, reason: 'sync still in flight');
+
+      // The sync completes after — its result is newer, it lands.
+      h.publish(
+        Connected(
+          checkedAt: DateTime.now(),
+          kind: ConnectionCheckKind.authenticatedRead,
+          authOk: true,
+        ),
+        epoch: syncEpoch,
+      );
+      expect(h.checking, isFalse);
+      expect((h.last as Connected).authOk, isTrue);
+
+      // And the guardrail still holds in this shape: if the SYNC had
+      // published an auth failure first, the late probe cannot undo it.
+      final p2 = h.beginCheck();
+      final s2 = h.beginCheck();
+      h.publish(
+        AuthFailure(checkedAt: DateTime.now(), statusCode: 401),
+        epoch: s2,
+      );
+      h.publish(
+        Connected(
+          checkedAt: DateTime.now(),
+          kind: ConnectionCheckKind.probe,
+          authOk: false,
+        ),
+        epoch: p2,
+      );
+      expect(h.last, isA<AuthFailure>());
+    });
+
     test('epoch-less publish keeps legacy last-writer-wins', () {
       final h = ConnectionHolder();
       h.publish(Unreachable(checkedAt: DateTime.now()));

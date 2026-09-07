@@ -271,6 +271,7 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
                           tooltip: 'Clear search',
                           onPressed: () {
                             _search.clear();
+                            _search.clear();
                             setState(() => _query = '');
                           },
                         ),
@@ -296,7 +297,12 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
                     message: 'No matches',
                     supporting: 'Try a different search.',
                     action: TextButton(
-                      onPressed: () => setState(() => _query = ''),
+                      onPressed: () {
+                        // Visual review 33fcdfa: clear BOTH the filter
+                        // state and the visible field text.
+                        _search.clear();
+                        setState(() => _query = '');
+                      },
                       child: const Text('Clear search'),
                     ),
                   )
