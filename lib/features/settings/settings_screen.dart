@@ -4,6 +4,7 @@ import '../../app_bootstrap.dart';
 import '../../core/api/data_api_client.dart';
 import '../../pairing/pairing_client.dart';
 import '../../pairing/server_config_repository.dart';
+import '../../core/build_stamp.dart';
 import '../../ui/components/status.dart';
 import '../../ui/theme/theme_controller.dart';
 
@@ -131,6 +132,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         children: [
+          // Build identification: answers 'which build is installed' from
+          // the phone itself (SHA + build number, matching Android
+          // versionCode).
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 4),
+            child: Text(
+              'Build $buildSha · #$buildNumber',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
+          ),
           // ── Appearance ───────────────────────────────────────────
           _sectionLabel('Appearance', scheme),
           if (controller != null)
