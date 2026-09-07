@@ -186,3 +186,40 @@ class GenerateRequest {
     'reason': ?reason,
   };
 }
+
+/// The two export formats the server renders (`medical-export`).
+enum ExportFormat {
+  pdf('pdf', 'PDF', 'application/pdf'),
+  docx(
+    'docx',
+    'Word (.docx)',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  );
+
+  const ExportFormat(this.wire, this.label, this.mimeType);
+
+  final String wire;
+  final String label;
+  final String mimeType;
+
+  static ExportFormat? fromWire(String s) {
+    for (final f in ExportFormat.values) {
+      if (f.wire == s) return f;
+    }
+    return null;
+  }
+}
+
+/// A downloaded export: raw bytes plus the server-suggested filename and
+/// content type.
+class ExportFile {
+  const ExportFile({
+    required this.bytes,
+    required this.filename,
+    required this.contentType,
+  });
+
+  final List<int> bytes;
+  final String filename;
+  final String? contentType;
+}

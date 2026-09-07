@@ -283,6 +283,35 @@ class DataApiClient {
     }
   }
 
+  /// `GET /v1/recordings/{id}/export?format=pdf|docx&doc_type=…` — download the
+  /// rendered document. Returns the raw bytes plus the server-suggested
+  /// filename (parsed from `Content-Disposition`).
+  Future<ExportFile> exportDocument(
+    String recordingId,
+    DocType doc,
+    ExportFormat format,
+  ) async {
+    final uri = Uri.parse(
+      '$baseUrl/v1/recordings/$recordingId/export',
+    ).replace(queryParameters: {'format': format.wire, 'doc_type': doc.wire});
+    final resp = await _client
+        .get(uri, headers: {'Authorization': 'Bearer $token'})
+        .timeout(const Duration(minutes: 2));
+    AppLog.status('export.${doc.wire}.${format.wire}', resp.statusCode);
+    if (resp.statusCode != 200) {
+      throw DataApiException(resp.statusCode, 'export failed');
+    }
+    final bytes = resp.bodyBytes;
+    AppLog.byteLength('export.bytes', bytes.length);
+    return ExportFile(
+      bytes: bytes,
+      filename:
+          parseExportFilename(resp.headers['content-disposition']) ??
+          '${doc.wire}-${recordingId.substring(0, recordingId.length.clamp(0, 8))}.${format.wire}',
+      contentType: resp.headers['content-type'],
+    );
+  }
+
   /// `POST /v1/devices/self` — revoke the caller's own token.
   ///
   /// Best-effort: if the server is unreachable, the caller still clears local
@@ -318,6 +347,16 @@ class ContentPullPage {
   final List<SyncRecording> recordings;
   final String serverTime;
   final bool hasMore;
+}
+
+/// Extracts the filename from a `Content-Disposition` header of the form
+/// `attachment; filename="soap-abc12345.pdf"`. Returns null when absent.
+String? parseExportFilename(String? disposition) {
+  if (disposition == null) return null;
+  final match = RegExp(r'filename="?([^";]+)"?').firstMatch(disposition);
+  if (match == null) return null;
+  final name = match.group(1)!.trim();
+  return name.isEmpty ? null : name;
 }
 
 /// Minimal SSE parser: the server emits `data: {json}\n\n` frames (axum

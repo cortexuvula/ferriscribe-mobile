@@ -49,7 +49,9 @@ void main() {
         host: 'localhost',
         port: 11437,
         token: 'test-token',
-        client: MockClient((req) async => throw const SocketException('offline')),
+        client: MockClient(
+          (req) async => throw const SocketException('offline'),
+        ),
       );
       expect(await client.revokeSelf(), isFalse);
       client.close();

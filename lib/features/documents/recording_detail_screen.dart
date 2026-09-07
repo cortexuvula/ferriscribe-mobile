@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../app_bootstrap.dart';
 import '../../core/api/models.dart';
+import '../export/export_service.dart';
 import 'document_editor_screen.dart';
 import 'document_service.dart';
 
@@ -24,9 +25,11 @@ class RecordingDetailScreen extends StatefulWidget {
 
 class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
   final DocumentService _service = DocumentService();
+  final ExportService _exportService = ExportService();
 
   /// Which doc type is currently generating (drives the spinner).
   DocType? _generating;
+  DocType? _exporting;
   String? _generateError;
   final Map<DocType, bool> _hasContent = {};
 
@@ -125,6 +128,47 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
     if (mounted) setState(() => _generateError = message);
   }
 
+  /// Prompts for a format then exports + shares the rendered document.
+  Future<void> _export(DocType doc) async {
+    final format = await showModalBottomSheet<ExportFormat>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(title: Text('Export as')),
+            for (final f in ExportFormat.values)
+              ListTile(
+                leading: const Icon(Icons.share_outlined),
+                title: Text(f.label),
+                onTap: () => Navigator.pop(context, f),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (format == null) return;
+
+    final token = await widget.services.serverConfigRepository.readToken();
+    final config = await widget.services.serverConfigRepository.readCurrent();
+    if (token == null || token.isEmpty || config == null) {
+      _showError('Not paired.');
+      return;
+    }
+
+    setState(() => _exporting = doc);
+    final outcome = await _exportService.exportAndShare(
+      config: config,
+      token: token,
+      recordingId: widget.recording.id,
+      doc: doc,
+      format: format,
+    );
+    if (!mounted) return;
+    setState(() => _exporting = null);
+    if (!outcome.ok) _showError(outcome.error ?? 'Export failed.');
+  }
+
   @override
   Widget build(BuildContext context) {
     final rec = widget.recording;
@@ -184,13 +228,24 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (has)
+                  if (has) ...[
                     IconButton(
                       icon: const Icon(Icons.edit_outlined),
                       tooltip: 'Edit',
                       onPressed: () => _openEditor(doc),
-                    )
-                  else
+                    ),
+                    IconButton(
+                      icon: _exporting == doc
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.share_outlined),
+                      tooltip: 'Export',
+                      onPressed: _exporting == null ? () => _export(doc) : null,
+                    ),
+                  ] else
                     IconButton(
                       icon: const Icon(Icons.auto_awesome_outlined),
                       tooltip: 'Generate',
