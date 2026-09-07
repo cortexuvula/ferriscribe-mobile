@@ -1,0 +1,830 @@
+{
+  "artifact": "design simulation only",
+  "flows": {
+    "record_to_document": "pass (simulated)",
+    "failed_save_buffer_and_exit_guard": "pass (simulated)",
+    "format_and_share": "pass (simulation; no exported file)",
+    "peer_required_fields": "pass",
+    "theme_restore_and_system_changes": "pass",
+    "local_search": "pass",
+    "offline_readonly": "pass",
+    "document_scroll": "pass; footer is outside scroll area, not overlaid"
+  },
+  "layout": [
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "home",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "prepare",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "context",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "record",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "processing",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "complete",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "detail",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "reader",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "edit",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "peer",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "settings",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "pair",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "scanner",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "manual",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "light",
+      "screen": "confirm",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "home",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "prepare",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "context",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "record",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "processing",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "complete",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "detail",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "reader",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "edit",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "peer",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "settings",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "pair",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "scanner",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "manual",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 320,
+      "theme": "dark",
+      "screen": "confirm",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "home",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "prepare",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "context",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "record",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "processing",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "complete",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "detail",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "reader",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "edit",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "peer",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "settings",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "pair",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "scanner",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "manual",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "screen": "confirm",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "home",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "prepare",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "context",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "record",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "processing",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "complete",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "detail",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "reader",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "edit",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "peer",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "settings",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "pair",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "scanner",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "manual",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "screen": "confirm",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "home",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "prepare",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "context",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "record",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "processing",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "complete",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "detail",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "reader",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "edit",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "peer",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "settings",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "pair",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "scanner",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "manual",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "light",
+      "screen": "confirm",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "home",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "prepare",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "context",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "record",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "processing",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "complete",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "detail",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "reader",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "edit",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "peer",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "settings",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "pair",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "scanner",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "manual",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    },
+    {
+      "width": 1320,
+      "theme": "dark",
+      "screen": "confirm",
+      "outerOverflow": false,
+      "contentOverflow": false,
+      "shortButtons": [],
+      "footerOverlap": false
+    }
+  ],
+  "page_errors": [],
+  "external_requests": [],
+  "layout_failures": [],
+  "screen_count": 15,
+  "layout_case_count": 90
+}

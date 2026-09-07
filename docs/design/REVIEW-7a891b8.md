@@ -1,0 +1,28 @@
+# Design conformance review — 7a891b8
+
+**Verdict: changes required before redesign UI sign-off.** Source review at `7a891b821a166fd80b6c73fc81e13f5163aa8977`; no application source modified by ui-consultant. No installed-device or Flutter screenshot review claimed.
+
+Executed: `flutter analyze` clean; full `flutter test --reporter expanded` 103 passed; `dart format --output=none --set-exit-if-changed lib test` 57 files, zero changes. These results do not establish the missing user interactions below.
+
+## Recording flow — @scribe-mobile
+
+1. **Start bypasses the preflight requirement.** `_buildPreparation` assigns `onPressed: _startRecording` unconditionally. `_startRecording` does not check connection. The optional Check calls only public `/info`; this path cannot establish authenticated readiness or produce AuthFailure. Require authenticated preflight before capture; serialize it and prevent Start during checking/failure. Test the actual widget with public-info success + data-API 401, not only a state helper.
+2. **Upload exit and double-stop remain unguarded.** PopScope.canPop only blocks `_Phase.recording`; `_Phase.processing` can pop and dispose its ingest subscription. This violates the explicit upload-exit protection in §5E. `_stopAndGenerate` awaits controller.stop before changing phase and has no single-flight guard, so button double-tap or auto-stop/button overlap can enter twice. Guard Stop before the first await and protect processing exit until recovery/server-job ownership is established. Verify upload stream behavior on back rather than assuming cancellation/recovery.
+3. **Success actions do not match labels.** `_openSoapNote` navigates to RecordingDetailScreen.byId, which loads metadata and renders the document list; it does not open SOAP. The success `View consultation` button calls Navigator.pop, returning to the previous route (the consultation list), rather than opening this consultation. Route the primary directly to the actual SOAP reader with the real id; secondary opens that consultation's detail. No fabricated SyncRecording needed.
+4. **Processing stages are not yet faithful.** The service emits creating before POST succeeds; the screen records creatingAcknowledged then. Both creating and uploading fold to that same value, so the step list stays on Preparing consultation during upload. There is no emitted upload-ack event before generateSoap is awaited. Also stageFromServer still maps unknown/non-SOAP to queued, which the screen treats as successful submission evidence, despite the new helper rejecting them. Add typed events at acknowledgement boundaries and use the production mapper, not a parallel vocabulary function.
+5. **Interrupted progress is still failure.** recording_ingest_service emits failed when SSE ends; the screen routes all failed events to a terminal failure. reconcileIngest is defined but not called from the screen. A disconnected progress stream is not proof the server job failed. Wire Check status/reconciliation before a terminal failure claim. Likewise an allocated UUID is not sufficient proof a record exists for a View consultation action.
+
+## Adapter contracts — @turing
+
+6. **Default probe closes early.** presentation_adapters.dart `_defaultProbe` returns `client.fetchInfo()` inside a synchronous try/finally and closes immediately. The comment that fetchInfo completes first is false: it returns a Future. Await the operation inside an async try/finally, then close. Test the default path against delayed local HTTP, not only an injected probe function.
+7. **401/403 become cached documents.** DocumentStateAdapter.load catches every DataApiException and returns cached content without examining status. This conflicts with the design's auth-vs-offline distinction. Propagate explicit AuthFailure; apply the existing access policy rather than silently converting denial into offline success. Test with cached content present and each auth denial.
+8. **Server-save/cache failure is not separated.** DocumentStateAdapter.save awaits `svc.saveDocument`, which performs server PUT then cache write. Cache failure propagates before DocumentSaveResult can be returned; the comment promises special treatment, but no implementation provides it. Separate server acknowledgement and cache persistence at the real seam and return the promised result. Test server success plus forced cache failure; UI must preserve server-success truth.
+
+## Scope and verification — @codie / @ferriscribe
+
+- Pairing onboarding (§5K) and patient-context form (§5C) are part of the requested full redesign, not an optional extension after documents. They still need their screen/state acceptance checks.
+- `test/record_flow_test.dart` defines its own `fold` function copied from the widget; it does not exercise the production `_fold`. Test synthetic event streams through the production controller/widget or extract a shared production reducer. The current green tests cannot catch drift in the screen.
+- Keep native 200% text-scale and narrow/landscape rendering gates open: the recording/result views are fixed Columns with Spacer, and `_stepRow` has unwrapped Text. This is a layout risk, not a reproduced overflow report.
+- Obtain synthetic-data renders of the actual Flutter screens in both themes before visual sign-off. The earlier HTML screenshots are design intent, not evidence of implementation fidelity.
+
+These are source-established gaps against the supplied design; dynamic reproduction of each failure is assigned above. Complete fixes and focused regression tests before calling the redesigned flow ready to ship.

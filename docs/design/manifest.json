@@ -1,0 +1,19 @@
+{
+  "status": "proposed-not-implemented",
+  "source_baseline": "7a5f2ffb178c7658375067f22d3ddbcace81b77f",
+  "bundle": "FerriScribe-Mobile-Design-v1.zip",
+  "files": [
+    "DESIGN.md",
+    "MOBILE_REDESIGN.md",
+    "README.md",
+    "contrast-checks.json",
+    "overview-dark.png",
+    "overview-light.png",
+    "prototype-verification.json",
+    "prototype.html",
+    "reader-large-dark.png",
+    "tokens.json",
+    "verify_prototype.py"
+  ],
+  "all_patient_content": "synthetic"
+}
