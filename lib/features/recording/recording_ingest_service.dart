@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/api/data_api_client.dart';
 import '../../core/api/models.dart';
 import '../../core/api/patient_context.dart';
+import '../../core/state/ingest_state.dart' show IngestFailurePhase;
 import '../../pairing/server_config_repository.dart';
 
 /// Client-side + server-side stages of a recording ingest, in order.
@@ -16,25 +17,45 @@ enum IngestStage {
   generatingSoap,
   completed,
   failed,
+
+  /// The SSE stream ended without a terminal event — NOT a failure fact.
+  /// The UI must reconcile via job status; the server job may still be
+  /// running or completed. Never render as `failed`.
+  interrupted,
 }
 
 /// One progress event emitted during ingest.
 class IngestEvent {
-  const IngestEvent({required this.stage, this.recordingId, this.error});
+  const IngestEvent({
+    required this.stage,
+    this.recordingId,
+    this.error,
+    this.failurePhase,
+  });
 
   final IngestStage stage;
   final String? recordingId;
+
+  /// Non-PHI technical detail (status codes, stage labels).
   final String? error;
 
+  /// Failure phase (core/state/ingest_state.dart), set only for
+  /// [IngestStage.failed] events — carried from the throw site so the UI
+  /// never infers it from error text.
+  final IngestFailurePhase? failurePhase;
+
   bool get isTerminal =>
-      stage == IngestStage.completed || stage == IngestStage.failed;
+      stage == IngestStage.completed ||
+      stage == IngestStage.failed ||
+      stage == IngestStage.interrupted;
 }
 
-/// Maps a server job stage string to the client [IngestStage] vocabulary.
-IngestStage stageFromServer(String stage) {
+/// Maps a KNOWN server job stage string to the client vocabulary. Unknown
+/// strings (per-doc-type generation stages, `unknown`) map to null — the
+/// SOAP-ingest UI must not present them as SOAP progress.
+IngestStage? knownServerStage(String stage) {
   switch (stage) {
     case 'queued':
-    case 'unknown':
       return IngestStage.queued;
     case 'transcribing':
       return IngestStage.transcribing;
@@ -45,18 +66,21 @@ IngestStage stageFromServer(String stage) {
     case 'failed':
       return IngestStage.failed;
     default:
-      // Per-doc-type stages (generating_referral, …) don't occur for the
-      // soap pipeline, but map defensively to queued so the UI stays honest.
-      return IngestStage.queued;
+      return null;
   }
 }
 
-/// Orchestrates the Phase 1 ingest: create recording → upload audio → trigger
-/// SOAP generation → stream job stages over SSE.
+/// Legacy mapper retained for callers that need a non-null result; unknown
+/// stages (incl. `unknown`) map to queued without inventing progress.
+IngestStage stageFromServer(String stage) =>
+    knownServerStage(stage) ?? IngestStage.queued;
+
+/// Orchestrates the ingest: create recording → upload audio → trigger SOAP
+/// generation → stream job stages over SSE.
 ///
-/// Emits one [IngestEvent] per stage transition and terminates on
-/// `completed`/`failed`. All network traffic is against the paired :11437
-/// data API only; nothing is written to disk on this side.
+/// Failure events carry their [IngestFailurePhase] from the throw site. An
+/// SSE stream that ends without a terminal event yields
+/// [IngestStage.interrupted] — never a failure.
 class RecordingIngestService {
   RecordingIngestService({
     this.clientFactory = DataApiClient.forConfig,
@@ -78,25 +102,40 @@ class RecordingIngestService {
     final id = uuid.v4();
     try {
       yield const IngestEvent(stage: IngestStage.creating);
-
-      await client.createRecording(
-        id: id,
-        filename: filename,
-        durationSeconds: duration.inMilliseconds / 1000.0,
-      );
+      try {
+        await client.createRecording(
+          id: id,
+          filename: filename,
+          durationSeconds: duration.inMilliseconds / 1000.0,
+        );
+      } on DataApiException catch (e) {
+        yield _failed(id, e, IngestFailurePhase.create);
+        return;
+      }
 
       yield const IngestEvent(stage: IngestStage.uploading);
-      await client.uploadAudio(id, wav);
+      try {
+        await client.uploadAudio(id, wav);
+      } on DataApiException catch (e) {
+        yield _failed(id, e, IngestFailurePhase.upload);
+        return;
+      }
 
-      await client.generateSoap(
-        id,
-        GenerateRequest(patientContext: patientContext?.toJson()),
-      );
+      try {
+        await client.generateSoap(
+          id,
+          GenerateRequest(patientContext: patientContext?.toJson()),
+        );
+      } on DataApiException catch (e) {
+        yield _failed(id, e, IngestFailurePhase.generate);
+        return;
+      }
       // The server marks the job `queued` synchronously before returning 202,
       // so the SSE stream's first event carries `queued` (or later).
 
       await for (final snapshot in client.jobEvents(id)) {
-        final stage = stageFromServer(snapshot.stage);
+        final stage = knownServerStage(snapshot.stage);
+        if (stage == null) continue; // not a SOAP-ingest stage — ignore
         if (stage == IngestStage.completed) {
           yield IngestEvent(stage: IngestStage.completed, recordingId: id);
           return;
@@ -106,32 +145,35 @@ class RecordingIngestService {
             stage: IngestStage.failed,
             recordingId: id,
             error: snapshot.error,
+            failurePhase: IngestFailurePhase.job,
           );
           return;
         }
         yield IngestEvent(stage: stage, recordingId: id);
       }
 
-      // SSE stream ended without a terminal event — surface a clean failure.
-      yield IngestEvent(
-        stage: IngestStage.failed,
-        recordingId: id,
-        error: 'job stream ended before completion',
-      );
-    } on DataApiException catch (e) {
-      yield IngestEvent(
-        stage: IngestStage.failed,
-        recordingId: id,
-        error: e.message,
-      );
+      // SSE ended without a terminal event. NOT a failure: the server job
+      // may still complete. The UI reconciles via job status.
+      yield IngestEvent(stage: IngestStage.interrupted, recordingId: id);
     } catch (e) {
-      yield IngestEvent(
+      yield const IngestEvent(
         stage: IngestStage.failed,
-        recordingId: id,
         error: 'ingest failed',
+        failurePhase: IngestFailurePhase.job,
       );
     } finally {
       client.close();
     }
   }
+
+  IngestEvent _failed(
+    String id,
+    DataApiException e,
+    IngestFailurePhase phase,
+  ) => IngestEvent(
+    stage: IngestStage.failed,
+    recordingId: id,
+    error: e.message,
+    failurePhase: phase,
+  );
 }

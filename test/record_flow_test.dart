@@ -56,11 +56,14 @@ void main() {
             uploadAcknowledged: prior.uploadAcknowledged,
             generationAccepted: prior.generationAccepted,
             failure: IngestFailure(
-              phase: IngestFailurePhase.unknown,
+              phase: event.failurePhase ?? IngestFailurePhase.job,
               detail: event.error ?? 'failed',
             ),
             audioRecoverable: false,
           );
+        case IngestStage.interrupted:
+          // NOT a failure — prior facts kept; the screen reconciles.
+          return prior;
       }
     }
 

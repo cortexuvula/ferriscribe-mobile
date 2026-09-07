@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app_bootstrap.dart';
+import '../../core/api/data_api_client.dart';
+import '../../core/api/models.dart';
 import '../../core/api/patient_context.dart';
 import '../../core/state/connection_state.dart' as conn;
 import '../../core/state/ingest_state.dart';
 import '../../core/state/presentation_adapters.dart';
 import '../../ui/components/status.dart';
 import '../../ui/theme/app_theme.dart';
+import '../documents/document_editor_screen.dart';
 import '../documents/recording_detail_screen.dart';
 import 'patient_context_form.dart';
 import 'recording_controller.dart';
@@ -56,6 +59,8 @@ class _RecordScreenState extends State<RecordScreen> {
 
   StreamSubscription<IngestEvent>? _ingestSub;
   bool _starting = false;
+  bool _stopping = false;
+  bool _uploadComplete = false;
 
   @override
   void dispose() {
@@ -139,62 +144,77 @@ class _RecordScreenState extends State<RecordScreen> {
   // ── Recording → processing ────────────────────────────────────────────
 
   Future<void> _stopAndGenerate() async {
-    _ticker?.cancel();
-    final wav = await _controller.stop();
-    if (!mounted) return;
-    setState(() {
-      _phase = _Phase.processing;
-      _presentation = const IngestPresentation(
-        lastAcknowledgedStage: IngestAcknowledgedStage.creatingAcknowledged,
-        recordingId: '',
-        audioRecoverable: true, // WAV buffer still in RAM until dropped
-      );
-    });
-
-    final token = await widget.services.serverConfigRepository.readToken();
-    final config = await widget.services.serverConfigRepository.readCurrent();
-    if (token == null || token.isEmpty || config == null) {
+    if (_stopping) return; // single-flight: no overlapping Stop calls
+    _stopping = true;
+    try {
+      _ticker?.cancel();
+      final wav = await _controller.stop();
+      if (!mounted) return;
       setState(() {
-        _phase = _Phase.failed;
-        _presentation = IngestPresentation(
-          lastAcknowledgedStage: _presentation.lastAcknowledgedStage,
+        _phase = _Phase.processing;
+        _uploadComplete = false;
+        _presentation = const IngestPresentation(
+          lastAcknowledgedStage: IngestAcknowledgedStage.creatingAcknowledged,
           recordingId: '',
-          failure: const IngestFailure(
-            phase: IngestFailurePhase.create,
-            detail: 'not paired',
-          ),
-          audioRecoverable: true,
+          audioRecoverable: true, // WAV buffer still in RAM until dropped
         );
       });
-      return;
-    }
 
-    final filename = 'Consultation ${_nowLabel()}';
-    final patientContext = _patientContext;
-    _ingestSub = _ingest
-        .run(
-          config: config,
-          token: token,
-          wav: wav,
-          duration: _elapsed,
-          filename: filename,
-          patientContext: patientContext,
-        )
-        .listen(
-          (event) {
-            if (!mounted) return;
-            setState(() => _presentation = _fold(event, _presentation));
-            if (event.recordingId != null && patientContext != null) {
-              widget.services.offlineCache
-                  .upsertPatientContext(event.recordingId!, patientContext)
-                  .catchError((_) {});
-            }
-          },
-          onError: (Object _) {
-            if (!mounted) return;
-            setState(() => _phase = _Phase.failed);
-          },
-        );
+      final token = await widget.services.serverConfigRepository.readToken();
+      final config = await widget.services.serverConfigRepository.readCurrent();
+      if (token == null || token.isEmpty || config == null) {
+        setState(() {
+          _phase = _Phase.failed;
+          _presentation = IngestPresentation(
+            lastAcknowledgedStage: _presentation.lastAcknowledgedStage,
+            recordingId: '',
+            failure: const IngestFailure(
+              phase: IngestFailurePhase.create,
+              detail: 'not paired',
+            ),
+            audioRecoverable: true,
+          );
+        });
+        return;
+      }
+
+      final filename = 'Consultation ${_nowLabel()}';
+      final patientContext = _patientContext;
+      _ingestSub = _ingest
+          .run(
+            config: config,
+            token: token,
+            wav: wav,
+            duration: _elapsed,
+            filename: filename,
+            patientContext: patientContext,
+          )
+          .listen(
+            (event) {
+              if (!mounted) return;
+              setState(() {
+                if (event.stage == IngestStage.uploading) {
+                  _uploadStarted = true; // audio PUT in flight
+                }
+                if (event.stage == IngestStage.queued) {
+                  _uploadComplete = true; // audio safely on the server
+                }
+                _presentation = _fold(event, _presentation);
+              });
+              if (event.recordingId != null && patientContext != null) {
+                widget.services.offlineCache
+                    .upsertPatientContext(event.recordingId!, patientContext)
+                    .catchError((_) {});
+              }
+            },
+            onError: (Object _) {
+              if (!mounted) return;
+              setState(() => _phase = _Phase.failed);
+            },
+          );
+    } finally {
+      _stopping = false;
+    }
   }
 
   /// Folds a raw ingest event into the presentation state, tracking each
@@ -251,22 +271,50 @@ class _RecordScreenState extends State<RecordScreen> {
           uploadAcknowledged: prior.uploadAcknowledged,
           generationAccepted: prior.generationAccepted,
           failure: IngestFailure(
-            phase: _phaseFor(event),
+            // Carried on the event from the throw site — never inferred
+            // from error text.
+            phase: event.failurePhase ?? IngestFailurePhase.job,
             detail: event.error ?? 'failed',
           ),
           audioRecoverable: false,
         );
         if (mounted) setState(() => _phase = _Phase.failed);
+      case IngestStage.interrupted:
+        // SSE ended without a terminal event — NOT a failure. Reconcile
+        // against the job registry; keep prior facts meanwhile.
+        _reconcile();
+        next = prior;
     }
     return next;
   }
 
-  IngestFailurePhase _phaseFor(IngestEvent event) {
-    final err = event.error ?? '';
-    if (err.contains('create')) return IngestFailurePhase.create;
-    if (err.contains('upload')) return IngestFailurePhase.upload;
-    if (err.contains('generate')) return IngestFailurePhase.generate;
-    return IngestFailurePhase.unknown;
+  /// Reconciles an interrupted stream via `GET /v1/jobs/{id}` (§6.4):
+  /// completed → done; failed → acknowledged failure; unknown/network
+  /// error → keep the last acknowledged stage, never invent either.
+  Future<void> _reconcile() async {
+    final id = _presentation.recordingId;
+    if (id.isEmpty) return;
+    final token = await widget.services.serverConfigRepository.readToken();
+    final config = await widget.services.serverConfigRepository.readCurrent();
+    if (token == null || token.isEmpty || config == null) return;
+    final client = DataApiClient.forConfig(config, token);
+    try {
+      final reconciled = await reconcileIngest(
+        client: client,
+        prior: _presentation,
+      );
+      if (!mounted) return;
+      setState(() {
+        _presentation = reconciled;
+        if (reconciled.isTerminal && reconciled.failure == null) {
+          _phase = _Phase.done;
+        } else if (reconciled.failure != null) {
+          _phase = _Phase.failed;
+        }
+      });
+    } finally {
+      client.close();
+    }
   }
 
   /// Discard confirmation (design: intercept ALL exits from recording).
@@ -305,7 +353,24 @@ class _RecordScreenState extends State<RecordScreen> {
   void _openSoapNote() {
     final id = _presentation.recordingId;
     if (id.isEmpty) return;
-    // Real id, real fetch inside the detail screen — no fabricated record.
+    // Open the SOAP document itself — real id, authoritative fetch inside.
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => DocumentEditorScreen(
+          services: widget.services,
+          recordingId: id,
+          doc: DocType.soap,
+        ),
+      ),
+    );
+  }
+
+  void _viewConsultation() {
+    final id = _presentation.recordingId;
+    if (id.isEmpty) {
+      Navigator.of(context).pop();
+      return;
+    }
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
         builder: (_) => RecordingDetailScreen.byId(
@@ -315,8 +380,6 @@ class _RecordScreenState extends State<RecordScreen> {
       ),
     );
   }
-
-  void _viewConsultation() => _openSoapNote();
 
   String _nowLabel() {
     final now = DateTime.now();
@@ -329,10 +392,31 @@ class _RecordScreenState extends State<RecordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Exit protection: during recording always confirm; during processing,
+    // block exit while the upload is unacknowledged (leaving would destroy
+    // the only copy of the audio). Once the server owns the bytes, exit is
+    // safe — the job continues server-side.
+    final bool canPop = switch (_phase) {
+      _Phase.recording => false,
+      _Phase.processing => _uploadComplete,
+      _ => true,
+    };
     return PopScope(
-      canPop: _phase != _Phase.recording,
+      canPop: canPop,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _phase == _Phase.recording) _confirmDiscard();
+        if (didPop) return;
+        if (_phase == _Phase.recording) {
+          _confirmDiscard();
+        } else if (_phase == _Phase.processing) {
+          // Upload in flight: explain why leaving is blocked.
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Uploading audio — leaving now would lose this recording.',
+              ),
+            ),
+          );
+        }
       },
       child: Scaffold(
         appBar: AppBar(
@@ -403,14 +487,31 @@ class _RecordScreenState extends State<RecordScreen> {
         // Connection check before Start.
         _connectionRow(scheme),
         const SizedBox(height: 24),
+        // Start disabled after a failed connection check (per §5B); the
+        // user can Check again or proceed once reachable.
         FilledButton.icon(
-          onPressed: _startRecording,
+          onPressed: _startEnabled ? _startRecording : null,
           icon: const Icon(Icons.mic),
           label: const Text('Start recording'),
         ),
+        if (!_startEnabled)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Check the connection before recording.',
+              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+            ),
+          ),
       ],
     );
   }
+
+  /// Start requires a reachable or auth-ok connection (or no check yet —
+  /// the check is optional but a FAILED one blocks, per §5B).
+  bool get _startEnabled => switch (_connection) {
+    conn.Unreachable() || conn.AuthFailure() => false,
+    _ => true,
+  };
 
   Widget _connectionRow(ColorScheme scheme) {
     final state = _connection;
@@ -519,23 +620,22 @@ class _RecordScreenState extends State<RecordScreen> {
     );
   }
 
-  /// Ordered step list with real acknowledged state only.
+  /// Ordered step list. The first two steps track LOCAL flow state (create
+  /// in flight vs upload in flight vs upload acked); the rest track the
+  /// acknowledged stage. No invented progress.
   List<({String label, bool done, bool active})> _processingSteps() {
     final stage = _presentation.lastAcknowledgedStage;
-    int reached;
-    switch (stage) {
-      case IngestAcknowledgedStage.creatingAcknowledged:
-        reached = 0;
-      case IngestAcknowledgedStage.uploaded:
-        reached = 1;
-      case IngestAcknowledgedStage.generationQueued:
-        reached = 2;
-      case IngestAcknowledgedStage.transcribing:
-        reached = 3;
-      case IngestAcknowledgedStage.generatingSoap:
-        reached = 4;
-      case IngestAcknowledgedStage.completed:
-        reached = 5;
+    // Local index: 0 = creating, 1 = uploading (in flight), 2 = acked by
+    // server (queued or later).
+    final int local;
+    if (_uploadComplete ||
+        stage.index >= IngestAcknowledgedStage.generationQueued.index) {
+      local = 2;
+    } else if (stage == IngestAcknowledgedStage.uploaded ||
+        _presentation.uploadAcknowledged) {
+      local = 2;
+    } else {
+      local = _uploadInFlight ? 1 : 0;
     }
     final labels = [
       'Preparing consultation',
@@ -544,11 +644,27 @@ class _RecordScreenState extends State<RecordScreen> {
       'Transcribing',
       'Generating SOAP',
     ];
+    // reached = index of the first not-done step.
+    final int reached = switch (stage) {
+      IngestAcknowledgedStage.creatingAcknowledged => local,
+      IngestAcknowledgedStage.uploaded => 2,
+      IngestAcknowledgedStage.generationQueued => 2,
+      IngestAcknowledgedStage.transcribing => 3,
+      IngestAcknowledgedStage.generatingSoap => 4,
+      IngestAcknowledgedStage.completed => 5,
+    };
     return [
       for (var i = 0; i < labels.length; i++)
         (label: labels[i], done: i < reached, active: i == reached),
     ];
   }
+
+  /// True while the audio PUT is in flight (between the uploading event and
+  /// the queued acknowledgement).
+  bool get _uploadInFlight =>
+      _phase == _Phase.processing && !_uploadComplete && _uploadStarted;
+
+  bool _uploadStarted = false;
 
   Widget _stepRow(
     ({String label, bool done, bool active}) step,
