@@ -173,8 +173,9 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
                       fontSize: 13,
                       color: _offline
                           ? Theme.of(
-                              context,
-                            ).extension<AppStatusColors>()!.warning
+                                  context,
+                                ).extension<AppStatusColors>()?.warning ??
+                                Theme.of(context).colorScheme.onSurfaceVariant
                           : scheme.onSurfaceVariant,
                     ),
                   ),

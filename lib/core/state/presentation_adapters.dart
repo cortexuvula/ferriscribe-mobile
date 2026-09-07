@@ -5,6 +5,10 @@
 /// they replace stay untouched.
 library;
 
+import 'dart:io' show SocketException;
+
+import 'package:http/http.dart' as http;
+
 import '../../core/api/data_api_client.dart';
 import '../../core/api/models.dart';
 import '../../features/documents/document_service.dart';
@@ -181,16 +185,32 @@ class DocumentStateAdapter {
       if (e.statusCode == 401 || e.statusCode == 403) {
         throw DocumentAuthException(e.statusCode);
       }
-      // Server unreachable/5xx: serve cache honestly, if present.
-      final cachedContent = await svc.fetchDocumentCached(recordingId, doc);
-      return DocumentLoad(
-        docType: doc,
-        source: DocumentSource.cache,
-        content: cachedContent,
-        updatedAt: null,
-        cachedAvailable: cachedContent != null && cachedContent.isNotEmpty,
-      );
+      // Server answered with a non-auth error: fall back to cache below.
+      return _fromCache(doc, svc, recordingId);
+    } on SocketException {
+      // Transport-level connection failure: the server never answered —
+      // a genuine reachability case. Fall back to cache.
+      return _fromCache(doc, svc, recordingId);
+    } on http.ClientException {
+      // http-package transport failure (connection closed mid-request etc.)
+      // — same class: genuine reachability, cache fallback.
+      return _fromCache(doc, svc, recordingId);
     }
+  }
+
+  Future<DocumentLoad> _fromCache(
+    DocType doc,
+    DocumentService svc,
+    String recordingId,
+  ) async {
+    final cachedContent = await svc.fetchDocumentCached(recordingId, doc);
+    return DocumentLoad(
+      docType: doc,
+      source: DocumentSource.cache,
+      content: cachedContent,
+      updatedAt: null,
+      cachedAvailable: cachedContent != null && cachedContent.isNotEmpty,
+    );
   }
 
   /// §6.3 — cached availability for one recording, read straight from

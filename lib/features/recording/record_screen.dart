@@ -585,13 +585,18 @@ class _RecordScreenState extends State<RecordScreen> {
   }
 
   Widget _buildRecording() {
-    final status = Theme.of(context).extension<AppStatusColors>()!;
+    final scheme = Theme.of(context).colorScheme;
+    final status = Theme.of(context).extension<AppStatusColors>();
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
           const Spacer(),
-          Icon(Icons.mic, size: 72, color: status.warning),
+          Icon(
+            Icons.mic,
+            size: 72,
+            color: status?.warning ?? scheme.onSurfaceVariant,
+          ),
           const SizedBox(height: 20),
           Text(
             'Recording',
@@ -701,13 +706,17 @@ class _RecordScreenState extends State<RecordScreen> {
     ({String label, bool done, bool active}) step,
     ColorScheme scheme,
   ) {
-    final status = Theme.of(context).extension<AppStatusColors>()!;
+    final status = Theme.of(context).extension<AppStatusColors>();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
           if (step.done)
-            Icon(Icons.check_circle, color: status.success, size: 22)
+            Icon(
+              Icons.check_circle,
+              color: status?.success ?? Theme.of(context).colorScheme.primary,
+              size: 22,
+            )
           else if (step.active)
             SizedBox(
               width: 22,
@@ -736,13 +745,18 @@ class _RecordScreenState extends State<RecordScreen> {
   }
 
   Widget _buildDone() {
-    final status = Theme.of(context).extension<AppStatusColors>()!;
+    final scheme = Theme.of(context).colorScheme;
+    final status = Theme.of(context).extension<AppStatusColors>();
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
           const Spacer(),
-          Icon(Icons.check_circle, size: 72, color: status.success),
+          Icon(
+            Icons.check_circle,
+            size: 72,
+            color: status?.success ?? scheme.primary,
+          ),
           const SizedBox(height: 20),
           const Text(
             'SOAP note ready',

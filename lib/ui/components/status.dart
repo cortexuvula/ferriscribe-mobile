@@ -31,11 +31,19 @@ class StatusLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final status = Theme.of(context).extension<AppStatusColors>()!;
+    // Tolerate a theme without the extension (bare MaterialApp in tests):
+    // fall back to scheme-adjacent colors.
+    final status = Theme.of(context).extension<AppStatusColors>();
     final (color, defaultIcon) = switch (tone) {
       AppStatusTone.neutral => (scheme.onSurfaceVariant, Icons.info_outline),
-      AppStatusTone.success => (status.success, Icons.check_circle_outline),
-      AppStatusTone.warning => (status.warning, Icons.cloud_off_outlined),
+      AppStatusTone.success => (
+        status?.success ?? scheme.primary,
+        Icons.check_circle_outline,
+      ),
+      AppStatusTone.warning => (
+        status?.warning ?? scheme.onSurfaceVariant,
+        Icons.cloud_off_outlined,
+      ),
       AppStatusTone.error => (scheme.error, Icons.error_outline),
     };
     return Row(
@@ -78,16 +86,16 @@ class NoticeBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final status = Theme.of(context).extension<AppStatusColors>()!;
+    final status = Theme.of(context).extension<AppStatusColors>();
     final (bg, fg) = switch (tone) {
       AppStatusTone.neutral => (scheme.surfaceContainer, scheme.onSurface),
       AppStatusTone.success => (
-        status.successContainer,
-        status.onSuccessContainer,
+        status?.successContainer ?? scheme.primaryContainer,
+        status?.onSuccessContainer ?? scheme.onPrimaryContainer,
       ),
       AppStatusTone.warning => (
-        status.warningContainer,
-        status.onWarningContainer,
+        status?.warningContainer ?? scheme.surfaceContainerHighest,
+        status?.onWarningContainer ?? scheme.onSurface,
       ),
       AppStatusTone.error => (scheme.errorContainer, scheme.onErrorContainer),
     };
