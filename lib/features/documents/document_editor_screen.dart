@@ -147,7 +147,16 @@ class _DocumentEditorScreenState extends State<DocumentEditorScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-          ? Center(child: Text(_error!))
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(_error!),
+                  const SizedBox(height: 12),
+                  OutlinedButton(onPressed: _load, child: const Text('Retry')),
+                ],
+              ),
+            )
           : Padding(
               padding: const EdgeInsets.all(12),
               child: TextField(

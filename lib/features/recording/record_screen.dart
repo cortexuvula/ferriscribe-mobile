@@ -26,6 +26,7 @@ class _RecordScreenState extends State<RecordScreen> {
   IngestStage _stage = IngestStage.queued;
   String? _recordingId;
   String? _error;
+  String? _warning;
 
   Timer? _ticker;
   Duration _elapsed = Duration.zero;
@@ -41,11 +42,27 @@ class _RecordScreenState extends State<RecordScreen> {
 
   Future<void> _start() async {
     try {
-      await _controller.start();
+      await _controller.start(
+        onWarning: () {
+          if (!mounted) return;
+          setState(
+            () => _warning =
+                'Recording is long (30+ min). Consider stopping soon.',
+          );
+        },
+        onLimitReached: () {
+          if (!mounted) return;
+          setState(
+            () => _warning = 'Auto-stopped at 60 min to prevent memory issues.',
+          );
+          _stopAndIngest();
+        },
+      );
       setState(() {
         _recording = true;
         _elapsed = Duration.zero;
         _error = null;
+        _warning = null;
       });
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
         setState(() => _elapsed += const Duration(seconds: 1));
@@ -112,6 +129,7 @@ class _RecordScreenState extends State<RecordScreen> {
     setState(() {
       _recording = false;
       _elapsed = Duration.zero;
+      _warning = null;
     });
   }
 
@@ -142,6 +160,21 @@ class _RecordScreenState extends State<RecordScreen> {
               Text(_elapsedLabel(), style: const TextStyle(fontSize: 28)),
               const SizedBox(height: 8),
               const Text('Recording…'),
+              if (_warning != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _warning!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.black87),
+                  ),
+                ),
+              ],
             ] else if (_ingesting) ...[
               const SizedBox(
                 width: 48,

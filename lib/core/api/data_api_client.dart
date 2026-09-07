@@ -282,6 +282,29 @@ class DataApiClient {
       throw DataApiException(resp.statusCode, 'generate ${doc.wire} failed');
     }
   }
+
+  /// `POST /v1/devices/self` — revoke the caller's own token.
+  ///
+  /// Best-effort: if the server is unreachable, the caller still clears local
+  /// state and the token becomes orphaned (the desktop admin can revoke it
+  /// manually from the device list). Returns true if the server confirmed
+  /// revocation, false on any network/HTTP failure.
+  Future<bool> revokeSelf() async {
+    try {
+      final resp = await _client
+          .post(
+            Uri.parse('$baseUrl/v1/devices/self'),
+            headers: _headers,
+            body: '{}',
+          )
+          .timeout(const Duration(seconds: 10));
+      AppLog.status('devices.self.revoke', resp.statusCode);
+      return resp.statusCode == 204 || resp.statusCode == 200;
+    } catch (_) {
+      AppLog.event('devices.self.revoke.unreachable');
+      return false;
+    }
+  }
 }
 
 /// A page of content-sync pull results.

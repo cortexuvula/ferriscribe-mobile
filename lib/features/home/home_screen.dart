@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app_bootstrap.dart';
+import '../../core/api/data_api_client.dart';
 import '../../pairing/pairing_client.dart';
 import '../../pairing/server_config_repository.dart';
 import '../documents/recordings_screen.dart';
@@ -95,9 +96,10 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Unpair this device?'),
         content: const Text(
-          'This removes the stored token and server connection from this '
-          'phone. Revoking access on the server itself is done from the '
-          'desktop app.',
+          'This removes the stored token and revokes this phone\'s access on '
+          'the server. If the server is unreachable, the token is cleared '
+          'locally but may remain active on the server until revoked from '
+          'the desktop app.',
         ),
         actions: [
           TextButton(
@@ -112,6 +114,21 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     if (confirmed != true) return;
+
+    // Best-effort self-revocation: tell the server to revoke this token.
+    // If the server is unreachable, we still clear local state — the token
+    // becomes orphaned and the desktop admin can revoke it manually.
+    final token = await widget.services.serverConfigRepository.readToken();
+    final config = await widget.services.serverConfigRepository.readCurrent();
+    if (token != null && token.isNotEmpty && config != null) {
+      final client = DataApiClient.forConfig(config, token);
+      try {
+        await client.revokeSelf();
+      } finally {
+        client.close();
+      }
+    }
+
     await widget.services.serverConfigRepository.clear();
     widget.onUnpaired();
   }

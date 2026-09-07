@@ -142,9 +142,20 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
           if (_generateError != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _generateError!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              child: Column(
+                children: [
+                  Text(
+                    _generateError!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _generateError = null),
+                    icon: const Icon(Icons.close, size: 16),
+                    label: const Text('Dismiss'),
+                  ),
+                ],
               ),
             ),
           const SizedBox(height: 12),
