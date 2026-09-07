@@ -88,17 +88,20 @@ class ConnectionHolder extends ChangeNotifier {
 
   /// Render label per §5J. Kept here so every surface uses the same
   /// vocabulary.
+  /// Suffix label only — the surface supplies its own subject prefix
+  /// once (V5: 'Office server · Connected', never 'Office server ·
+  /// office server connected').
   String get label => switch (_last) {
     null => 'connection not checked',
     ConnectionChecking() => 'checking connection…',
     Connected(:final authOk, :final serverVersion) =>
       authOk
-          ? 'office server connected'
+          ? 'Connected'
           : (serverVersion != null
-                ? 'office server reachable · $serverVersion'
-                : 'office server reachable'),
-    Unreachable() => 'office server unreachable',
-    AuthFailure() => 'pairing needs attention',
+                ? 'Reachable · $serverVersion'
+                : 'Reachable'),
+    Unreachable() => 'Unreachable',
+    AuthFailure() => 'Pairing needs attention',
     ConnectionUnknown() => 'connection not checked',
   };
 }

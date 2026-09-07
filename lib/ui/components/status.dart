@@ -139,11 +139,16 @@ class EmptyState extends StatelessWidget {
     required this.icon,
     required this.message,
     this.supporting,
+    this.action,
   });
 
   final IconData icon;
   final String message;
   final String? supporting;
+
+  /// Optional trailing action (e.g. Clear search) for state-specific
+  /// recovery affordances (V4).
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -177,6 +182,7 @@ class EmptyState extends StatelessWidget {
                 ),
               ),
             ],
+            if (action != null) ...[const SizedBox(height: 16), action!],
           ],
         ),
       ),

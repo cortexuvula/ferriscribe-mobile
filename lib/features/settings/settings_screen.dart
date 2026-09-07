@@ -31,6 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Derived from the app-scoped holder (§5J): the check result outlives
   // this screen and is shared with the Consultations landing page.
   bool get _checking => widget.services.connection.checking;
+  bool get _authFailure => widget.services.connection.last is AuthFailure;
   bool get _reachable =>
       widget.services.connection.last is Connected &&
       widget.services.connection.last is! ConnectionChecking;
@@ -39,7 +40,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    // V5: subscribe to the shared holder — checks published elsewhere
+    // (launch check, sync fold, preflight) reflect here live.
+    widget.services.connection.addListener(_onConnectionChanged);
     _load();
+  }
+
+  @override
+  void dispose() {
+    widget.services.connection.removeListener(_onConnectionChanged);
+    super.dispose();
+  }
+
+  void _onConnectionChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
@@ -213,6 +227,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: StatusLine(
                 tone: AppStatusTone.success,
                 text: _reachDetail ?? 'Reachable',
+              ),
+            )
+          else if (_authFailure)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: StatusLine(
+                tone: AppStatusTone.error,
+                text:
+                    'Pairing needs attention — this phone was rejected by '
+                    'the server. Re-pair from the desktop app.',
               ),
             )
           else if (_unreachable)

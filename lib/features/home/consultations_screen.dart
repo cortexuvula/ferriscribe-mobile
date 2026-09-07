@@ -4,6 +4,7 @@ import '../../app_bootstrap.dart';
 import '../../core/api/data_api_client.dart';
 import '../../core/api/models.dart';
 import '../../core/state/connection_state.dart';
+import '../../core/state/presentation_adapters.dart';
 import '../../ui/components/status.dart';
 import '../../ui/theme/app_theme.dart';
 import '../documents/recording_detail_screen.dart';
@@ -42,7 +43,26 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
   void initState() {
     super.initState();
     widget.services.connection.addListener(_onConnectionChanged);
+    _launchCheck();
     _load();
+  }
+
+  /// V5 / user request: launch-time reachability check, DISTINCT from
+  /// the list pull — runs even while the list is loading, so the status
+  /// line is truthful immediately and doesn't depend on the list
+  /// resolving. Epoch-guarded so a slow probe can never overwrite a
+  /// newer fact (turing's 57d5d8c guardrail).
+  Future<void> _launchCheck() async {
+    final config = await widget.services.serverConfigRepository.readCurrent();
+    final token = await widget.services.serverConfigRepository.readToken();
+    if (config == null || token == null || token.isEmpty) return;
+    final holder = widget.services.connection;
+    final epoch = holder.beginCheck();
+    final state = await ConnectionStateAdapter().authenticatedCheck(
+      config: config,
+      token: token,
+    );
+    holder.publish(state, epoch: epoch);
   }
 
   void _onConnectionChanged() {
@@ -74,6 +94,10 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
       }
       return;
     }
+    // Epoch the sync fold (codie: without it, half the race surface is
+    // unguarded — a slow launch probe could overwrite a stale fold, or
+    // vice versa).
+    final epoch = widget.services.connection.beginCheck();
     try {
       final client = DataApiClient.forConfig(config, token);
       final list = await _pullAll(client);
@@ -85,6 +109,7 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
           kind: ConnectionCheckKind.authenticatedRead,
           authOk: true,
         ),
+        epoch: epoch,
       );
       if (mounted) {
         setState(() {
@@ -95,6 +120,7 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
     } on DataAuthException {
       widget.services.connection.publish(
         AuthFailure(checkedAt: DateTime.now()),
+        epoch: epoch,
       );
       if (mounted) {
         setState(() {
@@ -106,6 +132,7 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
       // Offline fallback: serve the last-synced cache.
       widget.services.connection.publish(
         Unreachable(checkedAt: DateTime.now()),
+        epoch: epoch,
       );
       final cached = await _loadCached();
       if (mounted) {
@@ -204,9 +231,29 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
                 ),
                 if (!_loading && _offline)
                   TextButton(onPressed: _load, child: const Text('Retry')),
+                // V5: a Check affordance on the landing page itself
+                // (§5A), not only buried in Settings.
+                if (!_loading && !_offline)
+                  TextButton(
+                    onPressed: _launchCheck,
+                    child: const Text('Check'),
+                  ),
               ],
             ),
           ),
+          // V5 (user request): an unreachable server is never a silent
+          // offline label — name the cause and offer recovery, EVEN
+          // while cached consultations are shown below.
+          if (!_loading && _offline)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+              child: NoticeBanner(
+                tone: AppStatusTone.warning,
+                text:
+                    'Could not reach your office server. Check that the '
+                    'desktop app and Tailscale are running.',
+              ),
+            ),
           // ── Search ─────────────────────────────────────────────────
           if (!_loading && _recordings.isNotEmpty)
             Padding(
@@ -234,17 +281,30 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
           Expanded(
             child: _loading
                 ? const ListLoadingState(label: 'Loading consultations…')
+                // V4: auth denial renders independent of _error — the
+                // 401 catch sets _authNeedsAttention without _error, and
+                // previously fell through to the generic empty state.
+                : _authNeedsAttention
+                ? _buildError()
                 : _error != null && _recordings.isEmpty
                 ? _buildError()
+                // V4: filtered-empty is distinct from genuinely-empty —
+                // underlying data exists but nothing matches the query.
+                : recordings.isEmpty && _recordings.isNotEmpty
+                ? EmptyState(
+                    icon: Icons.search_off,
+                    message: 'No matches',
+                    supporting: 'Try a different search.',
+                    action: TextButton(
+                      onPressed: () => setState(() => _query = ''),
+                      child: const Text('Clear search'),
+                    ),
+                  )
                 : recordings.isEmpty && _recordings.isEmpty
                 ? EmptyState(
                     icon: Icons.mic_none,
-                    message: _query.isEmpty
-                        ? 'No consultations yet'
-                        : 'No matches',
-                    supporting: _query.isEmpty
-                        ? 'Record a consultation to get started.'
-                        : 'Try a different search.',
+                    message: 'No consultations yet',
+                    supporting: 'Record a consultation to get started.',
                   )
                 : RefreshIndicator(
                     onRefresh: _load,
@@ -303,7 +363,7 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
   String _statusLineText() {
     if (_offline) return 'Offline · showing cached consultations';
     final c = widget.services.connection;
-    if (c.checking && c.last == null) return 'Office server · checking…';
+    if (c.checking && c.last == null) return 'Office server · Checking…';
     return 'Office server · ${c.label}';
   }
 

@@ -43,7 +43,7 @@ void main() {
           serverVersion: '1.2.3',
         ),
       );
-      expect(h.label, 'office server reachable · 1.2.3');
+      expect(h.label, 'Reachable · 1.2.3');
 
       h.publish(
         Connected(
@@ -52,13 +52,13 @@ void main() {
           authOk: true,
         ),
       );
-      expect(h.label, 'office server connected');
+      expect(h.label, 'Connected');
 
       h.publish(Unreachable(checkedAt: DateTime.now()));
-      expect(h.label, 'office server unreachable');
+      expect(h.label, 'Unreachable');
 
       h.publish(AuthFailure(checkedAt: DateTime.now()));
-      expect(h.label, 'pairing needs attention');
+      expect(h.label, 'Pairing needs attention');
     });
 
     test('beginCheck keeps previous fact and flags checking', () {
@@ -114,7 +114,7 @@ void main() {
     );
     expect(
       'Office server · ${s.connection.label}',
-      'Office server · office server connected',
+      'Office server · Connected',
     );
   });
 
