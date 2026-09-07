@@ -3,21 +3,39 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app_bootstrap.dart';
+import '../../core/api/data_api_client.dart';
 import '../../core/api/models.dart';
 import '../export/export_service.dart';
 import 'document_editor_screen.dart';
 import 'document_service.dart';
 
 /// Per-recording view: five document types, each with generate / view-edit.
+///
+/// Two entry paths: a full [recording] (list navigation), or just a
+/// [recordingId] (e.g. Open SOAP note after generation) — the metadata is
+/// resolved with a real fetch, never fabricated.
 class RecordingDetailScreen extends StatefulWidget {
-  const RecordingDetailScreen({
+  RecordingDetailScreen({
     super.key,
     required this.services,
     required this.recording,
-  });
+  }) : recordingId = recording!.id;
+
+  /// Id-keyed entry: fetches authoritative metadata on open.
+  const RecordingDetailScreen.byId({
+    super.key,
+    required this.services,
+    required this.recordingId,
+  }) : recording = null;
 
   final AppServices services;
-  final SyncRecording recording;
+
+  /// The recording, when navigated from the list. Null for the id-keyed
+  /// entry until [RecordingDetailScreen.byId] resolves it.
+  final SyncRecording? recording;
+
+  /// The recording id — always present.
+  final String recordingId;
 
   @override
   State<RecordingDetailScreen> createState() => _RecordingDetailScreenState();
@@ -28,6 +46,9 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
       DocumentService(cache: widget.services.offlineCache);
   final ExportService _exportService = ExportService();
 
+  /// Resolved recording; the list-passed one immediately, otherwise fetched.
+  SyncRecording? _resolved;
+
   /// Which doc type is currently generating (drives the spinner).
   DocType? _generating;
   DocType? _exporting;
@@ -37,8 +58,51 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _resolved = widget.recording;
+    if (_resolved != null) {
+      _seedContent(_resolved!);
+    } else {
+      _resolveRecording();
+    }
+  }
+
+  /// Fetch real metadata by id — no fabricated SyncRecording.
+  Future<void> _resolveRecording() async {
+    final token = await widget.services.serverConfigRepository.readToken();
+    final config = await widget.services.serverConfigRepository.readCurrent();
+    if (token == null || token.isEmpty || config == null) return;
+    final client = DataApiClient.forConfig(config, token);
+    try {
+      final byId = <String, SyncRecording>{};
+      String? cursor;
+      var guard = 0;
+      while (guard++ < 50) {
+        final page = await client.pullContent(since: cursor);
+        for (final r in page.recordings) {
+          if (!r.isDeleted) byId[r.id] = r;
+        }
+        if (!page.hasMore) break;
+        cursor = page.recordings.isNotEmpty
+            ? page.recordings.last.updatedAt
+            : page.serverTime;
+      }
+      final match = byId[widget.recordingId];
+      if (match != null && mounted) {
+        setState(() {
+          _resolved = match;
+          _seedContent(match);
+        });
+      }
+    } catch (_) {
+      // Offline or fetch failure: the doc rows still work via cache/server.
+    } finally {
+      client.close();
+    }
+  }
+
+  void _seedContent(SyncRecording rec) {
     for (final d in DocType.values) {
-      _hasContent[d] = widget.recording.hasDoc(d);
+      _hasContent[d] = rec.hasDoc(d);
     }
   }
 
@@ -61,7 +125,7 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
     StreamSubscription<String>? sub;
     try {
       sub = _service
-          .generate(config, token, widget.recording.id, doc, request)
+          .generate(config, token, widget.recordingId, doc, request)
           .listen(
             (stage) {
               if (stage == 'completed' && mounted) {
@@ -114,7 +178,7 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
           MaterialPageRoute<void>(
             builder: (_) => DocumentEditorScreen(
               services: widget.services,
-              recordingId: widget.recording.id,
+              recordingId: widget.recordingId,
               doc: doc,
             ),
           ),
@@ -161,7 +225,7 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
     final outcome = await _exportService.exportAndShare(
       config: config,
       token: token,
-      recordingId: widget.recording.id,
+      recordingId: widget.recordingId,
       doc: doc,
       format: format,
     );
@@ -172,17 +236,24 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final rec = widget.recording;
+    final rec = _resolved;
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: Text(rec.patientName ?? rec.filename)),
+      appBar: AppBar(
+        title: Text(rec?.patientName ?? rec?.filename ?? 'Consultation'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(rec.filename, style: const TextStyle(color: Colors.grey)),
-          if (rec.durationSeconds != null)
+          if (rec?.filename.isNotEmpty == true)
             Text(
-              '${rec.durationSeconds!.round()}s · updated ${_short(rec.updatedAt)}',
-              style: const TextStyle(color: Colors.grey),
+              rec!.filename,
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+          if (rec?.durationSeconds != null)
+            Text(
+              '${rec!.durationSeconds!.round()}s · updated ${_short(rec.updatedAt)}',
+              style: TextStyle(color: scheme.onSurfaceVariant),
             ),
           if (_generateError != null)
             Padding(
