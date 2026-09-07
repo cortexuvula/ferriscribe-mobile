@@ -21,6 +21,15 @@ import 'connection_state.dart';
 class ConnectionHolder extends ChangeNotifier {
   ConnectionState? _last;
 
+  /// Monotonic epoch: bumped by every [beginCheck]. A completion whose
+  /// epoch doesn't match the current one was superseded by a newer check
+  /// that already published — publishing it now would roll the shared
+  /// state BACKWARD (e.g. a slow launch probe answering 'reachable' after
+  /// a later read already established an auth failure). Stale completions
+  /// are dropped on the floor, last-writer-wins by check order, not by
+  /// network latency.
+  int _epoch = 0;
+
   /// The most recent completed check, if any. Null means never checked —
   /// rendered as 'connection not checked'.
   ConnectionState? get last => _last;
@@ -31,10 +40,17 @@ class ConnectionHolder extends ChangeNotifier {
 
   /// Publish a completed check. `ConnectionChecking` should not be pushed
   /// here — use [beginCheck] instead.
-  void publish(ConnectionState state) {
+  ///
+  /// [epoch] (from [beginCheck]) rejects superseded completions: pass the
+  /// epoch captured when the check started and a publish for an older
+  /// epoch is a no-op.
+  void publish(ConnectionState state, {int? epoch}) {
     if (state is ConnectionChecking) {
       beginCheck();
       return;
+    }
+    if (epoch != null && epoch != _epoch) {
+      return; // a newer check already published — stay at the newer truth
     }
     _last = state;
     _checking = false;
@@ -43,9 +59,13 @@ class ConnectionHolder extends ChangeNotifier {
 
   /// Mark a check as in flight. The previous completed fact is kept for
   /// progressive UI ('Checking…' + last-known state).
-  void beginCheck() {
+  /// Returns the epoch for the check being started; pass it back to
+  /// [publish] so a superseded completion can't overwrite a newer fact.
+  int beginCheck() {
+    _epoch++;
     _checking = true;
     notifyListeners();
+    return _epoch;
   }
 
   /// Fold a content-sync outcome into the shared state (§5J): a

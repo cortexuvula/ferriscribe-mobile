@@ -117,4 +117,60 @@ void main() {
       'Office server · office server connected',
     );
   });
+
+  group('superseded-completion rejection (launch-check guardrail)', () {
+    test('stale epoch publish is dropped; newer truth survives', () {
+      final h = ConnectionHolder();
+
+      // Launch probe starts (epoch 1), then a later authenticated read
+      // starts (epoch 2) and completes first with an AUTH FAILURE.
+      final launchEpoch = h.beginCheck();
+      final laterEpoch = h.beginCheck();
+      h.publish(
+        AuthFailure(checkedAt: DateTime.now(), statusCode: 401),
+        epoch: laterEpoch,
+      );
+      expect(h.last, isA<AuthFailure>());
+
+      // The slow launch probe now answers "reachable" — for its OLD epoch.
+      h.publish(
+        Connected(
+          checkedAt: DateTime.now(),
+          kind: ConnectionCheckKind.probe,
+          authOk: false,
+        ),
+        epoch: launchEpoch,
+      );
+      expect(
+        h.last,
+        isA<AuthFailure>(),
+        reason: 'a superseded completion must not overwrite the newer fact',
+      );
+
+      // A current-epoch publish still lands normally.
+      h.publish(
+        Connected(
+          checkedAt: DateTime.now(),
+          kind: ConnectionCheckKind.authenticatedRead,
+          authOk: true,
+        ),
+        epoch: h.beginCheck(),
+      );
+      expect(h.last, isA<Connected>());
+      expect((h.last as Connected).authOk, isTrue);
+    });
+
+    test('epoch-less publish keeps legacy last-writer-wins', () {
+      final h = ConnectionHolder();
+      h.publish(Unreachable(checkedAt: DateTime.now()));
+      h.publish(
+        Connected(
+          checkedAt: DateTime.now(),
+          kind: ConnectionCheckKind.probe,
+          authOk: false,
+        ),
+      );
+      expect(h.last, isA<Connected>());
+    });
+  });
 }
