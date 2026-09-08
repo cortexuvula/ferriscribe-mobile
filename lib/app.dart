@@ -174,7 +174,6 @@ class _AppShellState extends State<_AppShell> with WidgetsBindingObserver {
     // The prompt's own resume, observed while it is still up.
     if (widget.lock.authenticating) {
       _promptResumeExpected = false;
-      _promptResumeExpected = false;
       _wasBackgrounded = false;
       return;
     }

@@ -2,11 +2,15 @@ package com.ferriscribe.ferriscribe_mobile
 
 import android.os.Bundle
 import android.view.WindowManager
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+// FlutterFragmentActivity (NOT FlutterActivity): local_auth 3.x
+// requires a FragmentActivity host for BiometricPrompt — with the
+// plain activity, authenticate() throws PlatformException and the
+// unlock button does nothing (user report on #46).
+class MainActivity : FlutterFragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Block screenshots, screen recording, and app-switcher content

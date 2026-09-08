@@ -48,15 +48,28 @@ class AppLockController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Last authentication error (non-PHI: a fixed message, never the
+  /// raw exception text). Cleared on the next attempt.
+  String? authError;
+
   /// Runs one authentication attempt. Returns true when unlocked.
   Future<bool> tryUnlock(AppLockAuth auth) async {
     if (!_locked) return true;
     _authenticating = true;
+    authError = null;
     notifyListeners();
     try {
       final ok = await auth.authenticate();
       if (ok) unlock();
       return ok;
+    } catch (_) {
+      // e.g. PlatformException when the activity can't host
+      // BiometricPrompt, or no biometric hardware enrolled. A fixed,
+      // PHI-free message; the button stays re-tryable.
+      authError =
+          'Couldn\'t start authentication — check that a screen '
+          'lock is set up on this phone.';
+      return false;
     } finally {
       _authenticating = false;
       notifyListeners();

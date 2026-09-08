@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -94,6 +96,27 @@ void main() {
     );
   });
 
+  test('tryUnlock catches a throwing authenticate: PHI-free error, '
+      're-tryable, never unhandled', () async {
+    final c = AppLockController();
+    final threw = <String>[];
+    await runZonedGuarded(() async {
+      final ok = await c.tryUnlock(_ThrowingAuth());
+      expect(ok, isFalse);
+    }, (e, st) => threw.add('$e'));
+    expect(threw, isEmpty, reason: 'must not escape as an unhandled error');
+    expect(c.locked, isTrue);
+    expect(
+      c.authError,
+      contains("Couldn't start authentication"),
+      reason: 'visible, PHI-free error message',
+    );
+    final ok2 = await c.tryUnlock(_FakeAuth(0));
+    expect(ok2, isTrue);
+    expect(c.locked, isFalse);
+    expect(c.authError, isNull);
+  });
+
   test(
     'controller: lock/unlock notify; tryUnlock unlocks on success',
     () async {
@@ -113,3 +136,17 @@ void main() {
     },
   );
 }
+
+/// Codie/ferriscribe review item: authenticate() that THROWS (e.g.
+/// PlatformException when the host activity can't show BiometricPrompt)
+/// must surface a re-tryable, PHI-free error — not escape as an unhandled
+/// async error that leaves a dead button.
+class _ThrowingAuth implements AppLockAuth {
+  @override
+  Future<bool> canAuthenticate() async => true;
+
+  @override
+  Future<bool> authenticate() => throw Exception('no_fragment_activity');
+}
+
+void main2() {} // placeholder

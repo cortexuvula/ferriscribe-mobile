@@ -86,6 +86,14 @@ class AppLockScreen extends StatelessWidget {
                     ),
                   ),
                 },
+                if (lock.authError != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    lock.authError!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13, color: scheme.error),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Text(
                   'Build $buildSha · #$buildNumber',
