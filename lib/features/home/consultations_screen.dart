@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../app_bootstrap.dart';
@@ -38,6 +40,12 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
 
   final TextEditingController _search = TextEditingController();
   String _query = '';
+
+  /// Client-side pagination (user request): reveal the already-sorted
+  /// list 10 at a time. Data layer unchanged — the full pull and the
+  /// offline cache write-through keep the complete list.
+  static const _pageSize = 10;
+  int _visibleCount = _pageSize;
 
   @override
   void initState() {
@@ -87,6 +95,7 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
       _offline = false;
       _authNeedsAttention = false;
       _error = null;
+      _visibleCount = _pageSize; // fresh refresh, fresh window
     });
     final token = await widget.services.serverConfigRepository.readToken();
     final config = await widget.services.serverConfigRepository.readCurrent();
@@ -268,7 +277,10 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
               child: TextField(
                 controller: _search,
-                onChanged: (v) => setState(() => _query = v),
+                onChanged: (v) => setState(() {
+                  _query = v;
+                  _visibleCount = _pageSize; // never a stale deep window
+                }),
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.search),
                   hintText: 'Search name or consultation',
@@ -323,14 +335,46 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
                 : RefreshIndicator(
                     onRefresh: _load,
                     child: ListView.separated(
+                      key: const Key('consultations-list'),
                       physics: const AlwaysScrollableScrollPhysics(),
-                      itemCount: recordings.length,
+                      // Client-side pagination: reveal pageSize rows, a
+                      // Load-more footer grows the window by 10.
+                      itemCount:
+                          math.min(_visibleCount, recordings.length) +
+                          (recordings.length > _visibleCount ? 1 : 0),
                       separatorBuilder: (_, _) =>
                           Divider(height: 1, color: scheme.outlineVariant),
-                      itemBuilder: (context, index) => _ConsultationRow(
-                        rec: recordings[index],
-                        onTap: () => _open(recordings[index]),
-                      ),
+                      itemBuilder: (context, index) {
+                        final visible = math.min(
+                          _visibleCount,
+                          recordings.length,
+                        );
+                        if (index >= visible) {
+                          final remaining = recordings.length - visible;
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                            // V1 lesson: finite minima + fullWidthButton —
+                            // an unconstrained button in a list footer is
+                            // the infinite-width bug class.
+                            child: fullWidthButton(
+                              OutlinedButton.icon(
+                                onPressed: () =>
+                                    setState(() => _visibleCount += _pageSize),
+                                icon: const Icon(Icons.expand_more),
+                                label: Text(
+                                  remaining > _pageSize
+                                      ? 'Load more ($remaining remaining)'
+                                      : 'Load more',
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+                        return _ConsultationRow(
+                          rec: recordings[index],
+                          onTap: () => _open(recordings[index]),
+                        );
+                      },
                     ),
                   ),
           ),
