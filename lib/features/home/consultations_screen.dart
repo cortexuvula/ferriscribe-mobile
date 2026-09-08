@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../app_bootstrap.dart';
@@ -13,10 +11,14 @@ import '../documents/recording_detail_screen.dart';
 import '../recording/record_screen.dart';
 import '../settings/settings_screen.dart';
 
-/// The consultation workspace: searchable consultations, a compact
-/// server-status line, and one primary New consultation action.
+/// The consultation workspace: searchable consultations (server-paged, 10 at
+/// a time), a compact server-status line, and one primary New consultation
+/// action.
 ///
-/// Replaces the action-only Home. Settings moves to the app bar.
+/// Option B: the list is fetched from `GET /v1/recordings` with a composite
+/// `(created_at, id)` cursor, ordered by consultation date. Each "Load more"
+/// tap fetches the next page and appends with dedupe-by-id. Search is scoped
+/// to loaded rows only (the UI says so explicitly).
 class ConsultationsScreen extends StatefulWidget {
   const ConsultationsScreen({
     super.key,
@@ -35,17 +37,23 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
   bool _loading = true;
   bool _offline = false;
   bool _authNeedsAttention = false;
+  bool _oldServer = false; // 404/405 on /v1/recordings — pre-0.76.5 server
   String? _error;
+
+  /// Accumulated recordings across pages, deduped by id.
   List<SyncRecording> _recordings = const [];
+
+  /// Cursor for the next page fetch; null when we've reached the end.
+  String? _nextCursor;
+
+  /// Whether a "Load more" fetch is in flight (single-flight guard).
+  bool _loadingMore = false;
+
+  /// Whether the last "Load more" fetch failed (retry available).
+  bool _loadMoreFailed = false;
 
   final TextEditingController _search = TextEditingController();
   String _query = '';
-
-  /// Client-side pagination (user request): reveal the already-sorted
-  /// list 10 at a time. Data layer unchanged — the full pull and the
-  /// offline cache write-through keep the complete list.
-  static const _pageSize = 10;
-  int _visibleCount = _pageSize;
 
   @override
   void initState() {
@@ -89,13 +97,18 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
     super.dispose();
   }
 
+  /// Fetch the first page (refresh or initial load). Resets cursor and
+  /// accumulated list.
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _offline = false;
       _authNeedsAttention = false;
+      _oldServer = false;
       _error = null;
-      _visibleCount = _pageSize; // fresh refresh, fresh window
+      _recordings = const [];
+      _nextCursor = null;
+      _loadMoreFailed = false;
     });
     final token = await widget.services.serverConfigRepository.readToken();
     final config = await widget.services.serverConfigRepository.readCurrent();
@@ -114,22 +127,32 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
     final epoch = widget.services.connection.beginCheck();
     try {
       final client = DataApiClient.forConfig(config, token);
-      final list = await _pullAll(client);
-      // A successful authenticated read proves reachability AND pairing —
-      // the strongest connection fact available.
-      widget.services.connection.publish(
-        Connected(
-          checkedAt: DateTime.now(),
-          kind: ConnectionCheckKind.authenticatedRead,
-          authOk: true,
-        ),
-        epoch: epoch,
-      );
-      if (mounted) {
-        setState(() {
-          _recordings = list;
-          _loading = false;
-        });
+      try {
+        final page = await client.listRecordingsPage(limit: 10);
+        // A successful authenticated read proves reachability AND pairing —
+        // the strongest connection fact available.
+        widget.services.connection.publish(
+          Connected(
+            checkedAt: DateTime.now(),
+            kind: ConnectionCheckKind.authenticatedRead,
+            authOk: true,
+          ),
+          epoch: epoch,
+        );
+        // Dedupe by id (server shouldn't duplicate, but defensive).
+        final byId = <String, SyncRecording>{};
+        for (final r in page.recordings) {
+          byId[r.id] = r;
+        }
+        if (mounted) {
+          setState(() {
+            _recordings = byId.values.toList();
+            _nextCursor = page.nextCursor;
+            _loading = false;
+          });
+        }
+      } finally {
+        client.close();
       }
     } on DataAuthException {
       widget.services.connection.publish(
@@ -140,6 +163,34 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
         setState(() {
           _loading = false;
           _authNeedsAttention = true;
+        });
+      }
+    } on DataApiException catch (e) {
+      // 404/405 = old server (pre-0.76.5, no /v1/recordings endpoint).
+      if (e.statusCode == 404 || e.statusCode == 405) {
+        widget.services.connection.publish(
+          Unreachable(checkedAt: DateTime.now()),
+          epoch: epoch,
+        );
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _oldServer = true;
+          });
+        }
+        return;
+      }
+      // Other HTTP errors fall through to the generic catch.
+      widget.services.connection.publish(
+        Unreachable(checkedAt: DateTime.now()),
+        epoch: epoch,
+      );
+      final cached = await _loadCached();
+      if (mounted) {
+        setState(() {
+          _recordings = cached;
+          _offline = true;
+          _loading = false;
         });
       }
     } catch (_) {
@@ -154,6 +205,61 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
           _recordings = cached;
           _offline = true;
           _loading = false;
+        });
+      }
+    }
+  }
+
+  /// Fetch the next page and append with dedupe-by-id. Single-flight: if a
+  /// fetch is already in progress, this is a no-op.
+  Future<void> _loadMore() async {
+    if (_loadingMore || _nextCursor == null) return;
+    setState(() {
+      _loadingMore = true;
+      _loadMoreFailed = false;
+    });
+    final token = await widget.services.serverConfigRepository.readToken();
+    final config = await widget.services.serverConfigRepository.readCurrent();
+    if (token == null || token.isEmpty || config == null) {
+      setState(() => _loadingMore = false);
+      return;
+    }
+    try {
+      final client = DataApiClient.forConfig(config, token);
+      try {
+        final page = await client.listRecordingsPage(
+          limit: 10,
+          cursor: _nextCursor,
+        );
+        if (mounted) {
+          setState(() {
+            // Append with dedupe-by-id: a row whose created_at shifts between
+            // page fetches (new recording landing mid-scroll) must not render
+            // twice. An insertion-ordered map seeded old-then-new keeps
+            // newest-first order; a collision keeps its first-insertion
+            // position while the newer page's content wins (codie's pin —
+            // pinned by `dedupe-by-id survives overlapping pages`).
+            final byId = <String, SyncRecording>{};
+            for (final r in _recordings) {
+              byId[r.id] = r;
+            }
+            for (final r in page.recordings) {
+              byId[r.id] = r;
+            }
+            _recordings = byId.values.toList();
+            _nextCursor = page.nextCursor;
+            _loadingMore = false;
+          });
+        }
+      } finally {
+        client.close();
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loadingMore = false;
+          _loadMoreFailed = true;
+          // Rows and scroll position are retained — the user can retry.
         });
       }
     }
@@ -195,6 +301,7 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
     );
   }
 
+  /// Search is scoped to loaded rows only (the UI says so explicitly).
   List<SyncRecording> get _filtered {
     if (_query.isEmpty) return _recordings;
     final q = _query.toLowerCase();
@@ -272,25 +379,25 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
               ),
             ),
           // ── Search ─────────────────────────────────────────────────
+          // Scoped to loaded rows only (Option B consequence: search cannot
+          // reach rows not yet fetched). The label and empty copy say so
+          // explicitly — ui-consultant's requirement.
           if (!_loading && _recordings.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
               child: TextField(
                 controller: _search,
-                onChanged: (v) => setState(() {
-                  _query = v;
-                  _visibleCount = _pageSize; // never a stale deep window
-                }),
+                onChanged: (v) => setState(() => _query = v),
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.search),
-                  hintText: 'Search name or consultation',
+                  labelText: 'Search loaded consultations',
+                  hintText: 'Name or consultation',
                   suffixIcon: _query.isEmpty
                       ? null
                       : IconButton(
                           icon: const Icon(Icons.clear),
                           tooltip: 'Clear search',
                           onPressed: () {
-                            _search.clear();
                             _search.clear();
                             setState(() => _query = '');
                           },
@@ -307,15 +414,18 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
                 // previously fell through to the generic empty state.
                 : _authNeedsAttention
                 ? _buildError()
+                : _oldServer
+                ? _buildOldServerError()
                 : _error != null && _recordings.isEmpty
                 ? _buildError()
-                // V4: filtered-empty is distinct from genuinely-empty —
+                // Filtered-empty is distinct from genuinely-empty —
                 // underlying data exists but nothing matches the query.
                 : recordings.isEmpty && _recordings.isNotEmpty
                 ? EmptyState(
                     icon: Icons.search_off,
-                    message: 'No matches',
-                    supporting: 'Try a different search.',
+                    message: 'No matches in loaded consultations',
+                    supporting:
+                        'Try a different search, or load more consultations.',
                     action: TextButton(
                       onPressed: () {
                         // Visual review 33fcdfa: clear BOTH the filter
@@ -337,38 +447,18 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
                     child: ListView.separated(
                       key: const Key('consultations-list'),
                       physics: const AlwaysScrollableScrollPhysics(),
-                      // Client-side pagination: reveal pageSize rows, a
-                      // Load-more footer grows the window by 10.
-                      itemCount:
-                          math.min(_visibleCount, recordings.length) +
-                          (recordings.length > _visibleCount ? 1 : 0),
-                      separatorBuilder: (_, _) =>
-                          Divider(height: 1, color: scheme.outlineVariant),
+                      // Rows + optional footer (load-more or retry).
+                      itemCount: recordings.length + _footerCount,
+                      separatorBuilder: (_, index) {
+                        // No divider after the last row (before the footer).
+                        if (index == recordings.length - 1) {
+                          return const SizedBox.shrink();
+                        }
+                        return Divider(height: 1, color: scheme.outlineVariant);
+                      },
                       itemBuilder: (context, index) {
-                        final visible = math.min(
-                          _visibleCount,
-                          recordings.length,
-                        );
-                        if (index >= visible) {
-                          final remaining = recordings.length - visible;
-                          return Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-                            // V1 lesson: finite minima + fullWidthButton —
-                            // an unconstrained button in a list footer is
-                            // the infinite-width bug class.
-                            child: fullWidthButton(
-                              OutlinedButton.icon(
-                                onPressed: () =>
-                                    setState(() => _visibleCount += _pageSize),
-                                icon: const Icon(Icons.expand_more),
-                                label: Text(
-                                  remaining > _pageSize
-                                      ? 'Load more ($remaining remaining)'
-                                      : 'Load more',
-                                ),
-                              ),
-                            ),
-                          );
+                        if (index >= recordings.length) {
+                          return _buildFooter();
                         }
                         return _ConsultationRow(
                           rec: recordings[index],
@@ -387,6 +477,46 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
           onPressed: _newConsultation,
           icon: const Icon(Icons.mic),
           label: const Text('New consultation'),
+        ),
+      ),
+    );
+  }
+
+  /// Whether a footer row should be rendered (load-more or retry).
+  int get _footerCount {
+    if (_nextCursor != null || _loadMoreFailed) return 1;
+    return 0;
+  }
+
+  Widget _buildFooter() {
+    if (_loadMoreFailed) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+        child: fullWidthButton(
+          OutlinedButton.icon(
+            onPressed: _loadMore,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry loading more'),
+          ),
+        ),
+      );
+    }
+    // Load-more footer: visible whenever a next cursor exists, even when
+    // search yields no matches (ui-consultant's requirement: don't let the
+    // No-matches branch swallow it).
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+      child: fullWidthButton(
+        OutlinedButton.icon(
+          onPressed: _loadingMore ? null : _loadMore,
+          icon: _loadingMore
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.expand_more),
+          label: Text(_loadingMore ? 'Loading…' : 'Load more'),
         ),
       ),
     );
@@ -418,38 +548,33 @@ class _ConsultationsScreenState extends State<ConsultationsScreen> {
     );
   }
 
+  /// 404/405 on the list endpoint = old server (pre-0.76.5). Actionable:
+  /// update the desktop app. Codie's requirement: never a silent empty list.
+  Widget _buildOldServerError() {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        const SizedBox(height: 64),
+        EmptyState(
+          icon: Icons.system_update,
+          message: 'Server update required',
+          supporting:
+              'The office server is running an older version. Update the '
+              'desktop app to view consultations.',
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: OutlinedButton(onPressed: _load, child: const Text('Retry')),
+        ),
+      ],
+    );
+  }
+
   String _statusLineText() {
     if (_offline) return 'Offline · showing cached consultations';
     final c = widget.services.connection;
     if (c.checking && c.last == null) return 'Office server · Checking…';
     return 'Office server · ${c.label}';
-  }
-
-  /// Paged full pull with 401 surfaced as a distinct auth failure and the
-  /// offline cache written through on success.
-  Future<List<SyncRecording>> _pullAll(DataApiClient client) async {
-    try {
-      final byId = <String, SyncRecording>{};
-      String? cursor;
-      var guard = 0;
-      while (guard++ < 50) {
-        final page = await client.pullContent(since: cursor);
-        for (final r in page.recordings) {
-          if (!r.isDeleted) byId[r.id] = r;
-        }
-        if (!page.hasMore) break;
-        cursor = page.recordings.isNotEmpty
-            ? page.recordings.last.updatedAt
-            : page.serverTime;
-      }
-      final list = byId.values.toList()
-        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-      await widget.services.offlineCache.replaceRecordings(list);
-      return list;
-    } on DataApiException catch (e) {
-      if (e.statusCode == 401) throw DataAuthException();
-      rethrow;
-    }
   }
 }
 

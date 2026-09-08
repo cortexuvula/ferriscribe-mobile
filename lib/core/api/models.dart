@@ -223,3 +223,24 @@ class ExportFile {
   final String filename;
   final String? contentType;
 }
+
+/// A page from the server-paged recordings list (`GET /v1/recordings`).
+///
+/// Ordered by consultation date (`created_at DESC`), with a composite
+/// `(created_at, id)` cursor. Stop fetching when [nextCursor] is null.
+class RecordingsListPage {
+  const RecordingsListPage({
+    required this.recordings,
+    required this.nextCursor,
+    required this.hasMore,
+  });
+
+  final List<SyncRecording> recordings;
+
+  /// The cursor to pass for the next page, or null when this is the last page.
+  final String? nextCursor;
+
+  /// Whether more pages exist (redundant with `nextCursor != null`, but
+  /// surfaced by the server for defensive checks).
+  final bool hasMore;
+}

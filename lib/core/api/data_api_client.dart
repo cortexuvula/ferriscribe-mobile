@@ -316,6 +316,41 @@ class DataApiClient {
     );
   }
 
+  // ── Option B: server-paged recordings list ───────────────────────────
+
+  /// `GET /v1/recordings?limit=N[&cursor=…]` — server-paged list ordered by
+  /// consultation date (`created_at DESC`). Composite `(created_at, id)` cursor;
+  /// stops when [RecordingsListPage.nextCursor] is null.
+  ///
+  /// 404/405 means the server predates this endpoint (pre-0.76.5); surfaced
+  /// as [DataApiException] with the real status so callers can distinguish
+  /// "old server" from a genuine failure.
+  Future<RecordingsListPage> listRecordingsPage({
+    int limit = 10,
+    String? cursor,
+  }) async {
+    final uri = Uri.parse(
+      '$baseUrl/v1/recordings',
+    ).replace(queryParameters: {'limit': limit.toString(), 'cursor': ?cursor});
+    final resp = await _client
+        .get(uri, headers: {'Authorization': 'Bearer $token'})
+        .timeout(const Duration(seconds: 30));
+    AppLog.status('recordings.list', resp.statusCode);
+    if (resp.statusCode != 200) {
+      throw DataApiException(resp.statusCode, 'recordings list failed');
+    }
+    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    final recordings = (body['recordings'] as List<dynamic>? ?? const [])
+        .map((r) => SyncRecording.fromJson(r as Map<String, dynamic>))
+        .toList();
+    AppLog.count('recordings.list.count', recordings.length);
+    return RecordingsListPage(
+      recordings: recordings,
+      nextCursor: body['next_cursor'] as String?,
+      hasMore: body['has_more'] as bool? ?? false,
+    );
+  }
+
   /// `POST /v1/devices/self` — revoke the caller's own token.
   ///
   /// Best-effort: if the server is unreachable, the caller still clears local
