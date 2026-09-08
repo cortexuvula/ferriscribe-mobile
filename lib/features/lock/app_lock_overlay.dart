@@ -42,9 +42,13 @@ class AppLockOverlay extends StatelessWidget {
               child: FocusScope(
                 canRequestFocus: false,
                 child: Offstage(
-                  // Offstage: keeps State (drafts, controllers alive),
-                  // lays out nothing, paints nothing, hit-tests nothing —
-                  // and standard finders skip it, matching 'invisible'.
+                  // Offstage: keeps State (drafts, controllers alive).
+                  // It still LAYS OUT the child (RenderOffstage
+                  // performs child.layout) but sizes itself to
+                  // constraints.smallest, paints nothing, and
+                  // hit-tests nothing; standard finders skip it. (The
+                  // earlier 'lays out nothing' claim was wrong —
+                  // ui-consultant's catch.)
                   child: child,
                 ),
               ),

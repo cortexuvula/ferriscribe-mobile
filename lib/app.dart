@@ -126,46 +126,75 @@ class _AppShellState extends State<_AppShell> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  /// When the auth prompt's own `resumed` was last seen; re-lock
+  /// suppression is bounded to this window so a GENUINE backgrounding
+  /// that outlasts it still re-locks (ui-consultant's f805d3e catch:
+  /// the old code computed suppression BEFORE clearing the expired
+  /// deadline, so a post-window resume stayed suppressed forever).
+  DateTime? _promptSettlingUntil;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _mask.didChangeAppLifecycleState(state);
-    // Codie review: the SYSTEM AUTH DIALOG fires its own inactive/
-    // resumed pair. Treating those as backgrounding re-locks right after
-    // a successful unlock (double prompt) — so while a prompt is up (or
-    // settling), we do not record a backgrounding instant.
-    final promptActive =
-        widget.lock.authenticating || _promptSettlingUntil != null;
     final now = DateTime.now();
+
+    // 1) Expiry FIRST — an expired settle window must not suppress
+    //    anything on this event.
     final settling = _promptSettlingUntil;
-    if (settling != null && now.isAfter(settling)) {
-      _promptSettlingUntil = null;
-    }
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused) {
+    final settlingStill = settling != null && now.isBefore(settling);
+    if (!settlingStill) _promptSettlingUntil = null;
+
+    // 2) Genuine-backgrounding evidence: ONLY paused/hidden/detached
+    //    count — `inactive` alone fires for dialogs, the notification
+    //    shade, and split-screen drags, none of which hand the phone to
+    //    someone else. Leaving the app ALWAYS reaches paused/hidden on
+    //    both platforms, so real handoffs are never missed. And while a
+    //    prompt is up, even paused is the prompt's own noise.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
       if (!widget.lock.authenticating) {
         _pausedAt ??= now;
       }
-    } else if (state == AppLifecycleState.resumed) {
-      if (widget.lock.authenticating) {
-        // The prompt dismissed -> this resume is the prompt's own.
-        _promptSettlingUntil = now.add(const Duration(seconds: 2));
-        _pausedAt = null;
-        return;
-      }
-      final settlingStill = _promptSettlingUntil != null;
-      final away = _pausedAt;
+      return;
+    }
+    if (state == AppLifecycleState.inactive) return;
+
+    if (state != AppLifecycleState.resumed) return;
+
+    // 3) A resume while the prompt is up is the prompt's own — extend
+    //    the settle window, clear stale evidence, and never re-lock
+    //    here (the lock is already engaged in every path that shows a
+    //    prompt).
+    if (widget.lock.authenticating) {
+      _promptSettlingUntil = now.add(_settleWindow);
       _pausedAt = null;
-      if (widget.lock.relockOnResume &&
-          away != null &&
-          !settlingStill &&
-          !promptActive) {
-        widget.lock.lock();
-        widget.lock.tryUnlock(widget.auth);
-      }
+      return;
+    }
+
+    // 4) A resume within the settle window after a prompt completed:
+    //    still treat as prompt noise (no double re-lock right after a
+    //    successful unlock).
+    if (settlingStill) {
+      _pausedAt = null;
+      return;
+    }
+
+    // 5) Otherwise: a genuine resume. Re-lock iff we have real
+    //    backgrounding evidence.
+    final away = _pausedAt;
+    _pausedAt = null;
+    if (widget.lock.relockOnResume && away != null) {
+      widget.lock.lock();
+      widget.lock.tryUnlock(widget.auth);
     }
   }
 
-  DateTime? _promptSettlingUntil;
+  /// Heuristic window (codie: documented trade) covering the OS's
+  /// post-prompt event stragglers. If a slow device eats a real
+  /// backgrounding inside it, the cost is one missed re-lock; cold
+  /// launch and every later resume re-lock normally.
+  static const _settleWindow = Duration(seconds: 2);
 
   @override
   Widget build(BuildContext context) {
