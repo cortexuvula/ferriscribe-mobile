@@ -107,7 +107,6 @@ class _AppShell extends StatefulWidget {
 
 class _AppShellState extends State<_AppShell> with WidgetsBindingObserver {
   final LifecycleMaskController _mask = LifecycleMaskController();
-  DateTime? _pausedAt;
 
   @override
   void initState() {
@@ -115,7 +114,7 @@ class _AppShellState extends State<_AppShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     // Cold launch: prompt as soon as the first frame is up.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.lock.locked) widget.lock.tryUnlock(widget.auth);
+      if (widget.lock.locked) _promptAndExpectResume();
     });
   }
 
@@ -126,75 +125,86 @@ class _AppShellState extends State<_AppShell> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  /// When the auth prompt's own `resumed` was last seen; re-lock
-  /// suppression is bounded to this window so a GENUINE backgrounding
-  /// that outlasts it still re-locks (ui-consultant's f805d3e catch:
-  /// the old code computed suppression BEFORE clearing the expired
-  /// deadline, so a post-window resume stayed suppressed forever).
-  DateTime? _promptSettlingUntil;
+  /// NO-CLOCK prompt-noise suppression (codie design + ui-consultant
+  /// refinement). The system auth dialog produces exactly one `resumed`
+  /// that is NOT a real background round-trip. Instead of a time window
+  /// (which a genuine fast handoff inside the window would defeat — a
+  /// PHI exposure), we track events:
+  ///
+  /// - [_promptResumeExpected] is set when WE show a prompt (every
+  ///   tryUnlock call site) and cleared when that resume is observed.
+  /// - A `resumed` while `authenticating` is the prompt's own.
+  /// - A later-arriving prompt resume (completion-before-resume order)
+  ///   is swallowed ONCE — but ONLY when no genuine-background evidence
+  ///   was recorded after unlock: EVIDENCE WINS. A real paused->resumed
+  ///   round-trip always re-locks, however fast.
+  bool _promptResumeExpected = false;
+  bool _wasBackgrounded = false;
+
+  /// Shows the auth prompt and marks that exactly ONE future `resumed`
+  /// belongs to the prompt itself (the system dialog's own event), so
+  /// the resume right after a successful unlock is not treated as a
+  /// genuine background round-trip.
+  void _promptAndExpectResume() {
+    _promptResumeExpected = true;
+    widget.lock.tryUnlock(widget.auth);
+  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _mask.didChangeAppLifecycleState(state);
-    final now = DateTime.now();
 
-    // 1) Expiry FIRST — an expired settle window must not suppress
-    //    anything on this event.
-    final settling = _promptSettlingUntil;
-    final settlingStill = settling != null && now.isBefore(settling);
-    if (!settlingStill) _promptSettlingUntil = null;
-
-    // 2) Genuine-backgrounding evidence: ONLY paused/hidden/detached
-    //    count — `inactive` alone fires for dialogs, the notification
-    //    shade, and split-screen drags, none of which hand the phone to
-    //    someone else. Leaving the app ALWAYS reaches paused/hidden on
-    //    both platforms, so real handoffs are never missed. And while a
-    //    prompt is up, even paused is the prompt's own noise.
+    // Genuine-backgrounding evidence: ONLY paused/hidden/detached count
+    // — `inactive` alone fires for dialogs, the notification shade, and
+    // split-screen drags, none of which hand the phone to someone else.
+    // Leaving the app ALWAYS reaches paused/hidden on both platforms.
+    // While a prompt is up, a paused is the prompt's own noise (the
+    // dialog covers the app); it also cancels the prompt, so no
+    // evidence is needed — the lock is engaged.
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
       if (!widget.lock.authenticating) {
-        _pausedAt ??= now;
+        _wasBackgrounded = true;
       }
       return;
     }
-    if (state == AppLifecycleState.inactive) return;
-
     if (state != AppLifecycleState.resumed) return;
 
-    // 3) A resume while the prompt is up is the prompt's own — extend
-    //    the settle window, clear stale evidence, and never re-lock
-    //    here (the lock is already engaged in every path that shows a
-    //    prompt).
+    // The prompt's own resume, observed while it is still up.
     if (widget.lock.authenticating) {
-      _promptSettlingUntil = now.add(_settleWindow);
-      _pausedAt = null;
+      _promptResumeExpected = false;
+      _promptResumeExpected = false;
+      _wasBackgrounded = false;
       return;
     }
 
-    // 4) A resume within the settle window after a prompt completed:
-    //    still treat as prompt noise (no double re-lock right after a
-    //    successful unlock).
-    if (settlingStill) {
-      _pausedAt = null;
+    final wasBackgrounded = _wasBackgrounded;
+    _wasBackgrounded = false;
+
+    if (wasBackgrounded) {
+      // Genuine background evidence exists: it was recorded after any
+      // unlock, so a pending prompt expectation CANNOT erase it
+      // (ui-consultant's refinement). Re-lock.
+      _promptResumeExpected = false;
+      if (widget.lock.relockOnResume) {
+        widget.lock.lock();
+        _promptAndExpectResume();
+      }
       return;
     }
 
-    // 5) Otherwise: a genuine resume. Re-lock iff we have real
-    //    backgrounding evidence.
-    final away = _pausedAt;
-    _pausedAt = null;
-    if (widget.lock.relockOnResume && away != null) {
-      widget.lock.lock();
-      widget.lock.tryUnlock(widget.auth);
+    if (_promptResumeExpected) {
+      // Completion-before-resume order: the prompt's straggler resume
+      // arrives after unlock with NO background evidence. Swallow it
+      // exactly once — no double prompt.
+      _promptResumeExpected = false;
+      return;
     }
+
+    // Resume with no evidence and no pending expectation (e.g. after an
+    // inactive-only banner pull): nothing to do.
   }
-
-  /// Heuristic window (codie: documented trade) covering the OS's
-  /// post-prompt event stragglers. If a slow device eats a real
-  /// backgrounding inside it, the cost is one missed re-lock; cold
-  /// launch and every later resume re-lock normally.
-  static const _settleWindow = Duration(seconds: 2);
 
   @override
   Widget build(BuildContext context) {
