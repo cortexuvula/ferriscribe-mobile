@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# UI review harness artifacts (synthetic render matrices + screenshots) —
+# large, transient, not source. The authoritative design spec lives in
+# docs/design/{DESIGN.md,MOBILE_REDESIGN.md,tokens.json}; these are scratch.
+docs/design/flutter-*/
+docs/design/visual_probe_*_test.dart
+

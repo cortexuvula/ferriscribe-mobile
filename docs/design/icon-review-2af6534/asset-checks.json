@@ -1,0 +1,533 @@
+{
+  "assets": [
+    {
+      "file": "assets/icon/app_icon.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "alpha_bbox": [
+        0,
+        0,
+        1024,
+        1024
+      ],
+      "white_bbox": [
+        17,
+        17,
+        1008,
+        1008
+      ],
+      "central_white_bbox": [
+        317,
+        228,
+        708,
+        881
+      ],
+      "corner": [
+        26,
+        115,
+        168
+      ]
+    },
+    {
+      "file": "assets/icon/adaptive_foreground.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGBA",
+      "alpha_bbox": [
+        162,
+        162,
+        862,
+        862
+      ],
+      "white_bbox": [
+        361,
+        292,
+        664,
+        798
+      ],
+      "central_white_bbox": [
+        361,
+        292,
+        664,
+        798
+      ],
+      "corner": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "file": "assets/icon/adaptive_background.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "alpha_bbox": [
+        0,
+        0,
+        1024,
+        1024
+      ],
+      "white_bbox": null,
+      "central_white_bbox": null,
+      "corner": [
+        26,
+        115,
+        168
+      ]
+    },
+    {
+      "file": "android/app/src/main/res/drawable-xxxhdpi/ic_launcher_foreground.png",
+      "size": [
+        432,
+        432
+      ],
+      "mode": "RGBA",
+      "alpha_bbox": [
+        68,
+        68,
+        364,
+        364
+      ],
+      "white_bbox": [
+        153,
+        124,
+        280,
+        337
+      ],
+      "central_white_bbox": [
+        153,
+        124,
+        280,
+        337
+      ],
+      "corner": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "file": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+      "size": [
+        192,
+        192
+      ],
+      "mode": "RGB",
+      "alpha_bbox": [
+        0,
+        0,
+        192,
+        192
+      ],
+      "white_bbox": [
+        60,
+        43,
+        132,
+        165
+      ],
+      "central_white_bbox": [
+        60,
+        43,
+        132,
+        165
+      ],
+      "corner": [
+        26,
+        115,
+        168
+      ]
+    },
+    {
+      "file": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png",
+      "size": [
+        192,
+        192
+      ],
+      "mode": "RGBA",
+      "alpha_bbox": [
+        0,
+        0,
+        192,
+        192
+      ],
+      "white_bbox": [
+        60,
+        43,
+        132,
+        165
+      ],
+      "central_white_bbox": [
+        60,
+        43,
+        132,
+        165
+      ],
+      "corner": [
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "ios": [
+    {
+      "name": "Icon-App-1024x1024@1x.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-20x20@1x.png",
+      "size": [
+        20,
+        20
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-20x20@2x.png",
+      "size": [
+        40,
+        40
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-20x20@3x.png",
+      "size": [
+        60,
+        60
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-29x29@1x.png",
+      "size": [
+        29,
+        29
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-29x29@2x.png",
+      "size": [
+        58,
+        58
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-29x29@3x.png",
+      "size": [
+        87,
+        87
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-40x40@1x.png",
+      "size": [
+        40,
+        40
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-40x40@2x.png",
+      "size": [
+        80,
+        80
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-40x40@3x.png",
+      "size": [
+        120,
+        120
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-50x50@1x.png",
+      "size": [
+        50,
+        50
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-50x50@2x.png",
+      "size": [
+        100,
+        100
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-57x57@1x.png",
+      "size": [
+        57,
+        57
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-57x57@2x.png",
+      "size": [
+        114,
+        114
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-60x60@2x.png",
+      "size": [
+        120,
+        120
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-60x60@3x.png",
+      "size": [
+        180,
+        180
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-72x72@1x.png",
+      "size": [
+        72,
+        72
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-72x72@2x.png",
+      "size": [
+        144,
+        144
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-76x76@1x.png",
+      "size": [
+        76,
+        76
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-76x76@2x.png",
+      "size": [
+        152,
+        152
+      ],
+      "mode": "RGB",
+      "alpha": false
+    },
+    {
+      "name": "Icon-App-83.5x83.5@2x.png",
+      "size": [
+        167,
+        167
+      ],
+      "mode": "RGB",
+      "alpha": false
+    }
+  ],
+  "ios_catalog": {
+    "images": [
+      {
+        "size": "20x20",
+        "idiom": "iphone",
+        "filename": "Icon-App-20x20@2x.png",
+        "scale": "2x"
+      },
+      {
+        "size": "20x20",
+        "idiom": "iphone",
+        "filename": "Icon-App-20x20@3x.png",
+        "scale": "3x"
+      },
+      {
+        "size": "29x29",
+        "idiom": "iphone",
+        "filename": "Icon-App-29x29@1x.png",
+        "scale": "1x"
+      },
+      {
+        "size": "29x29",
+        "idiom": "iphone",
+        "filename": "Icon-App-29x29@2x.png",
+        "scale": "2x"
+      },
+      {
+        "size": "29x29",
+        "idiom": "iphone",
+        "filename": "Icon-App-29x29@3x.png",
+        "scale": "3x"
+      },
+      {
+        "size": "40x40",
+        "idiom": "iphone",
+        "filename": "Icon-App-40x40@2x.png",
+        "scale": "2x"
+      },
+      {
+        "size": "40x40",
+        "idiom": "iphone",
+        "filename": "Icon-App-40x40@3x.png",
+        "scale": "3x"
+      },
+      {
+        "size": "57x57",
+        "idiom": "iphone",
+        "filename": "Icon-App-57x57@1x.png",
+        "scale": "1x"
+      },
+      {
+        "size": "57x57",
+        "idiom": "iphone",
+        "filename": "Icon-App-57x57@2x.png",
+        "scale": "2x"
+      },
+      {
+        "size": "60x60",
+        "idiom": "iphone",
+        "filename": "Icon-App-60x60@2x.png",
+        "scale": "2x"
+      },
+      {
+        "size": "60x60",
+        "idiom": "iphone",
+        "filename": "Icon-App-60x60@3x.png",
+        "scale": "3x"
+      },
+      {
+        "size": "20x20",
+        "idiom": "ipad",
+        "filename": "Icon-App-20x20@1x.png",
+        "scale": "1x"
+      },
+      {
+        "size": "20x20",
+        "idiom": "ipad",
+        "filename": "Icon-App-20x20@2x.png",
+        "scale": "2x"
+      },
+      {
+        "size": "29x29",
+        "idiom": "ipad",
+        "filename": "Icon-App-29x29@1x.png",
+        "scale": "1x"
+      },
+      {
+        "size": "29x29",
+        "idiom": "ipad",
+        "filename": "Icon-App-29x29@2x.png",
+        "scale": "2x"
+      },
+      {
+        "size": "40x40",
+        "idiom": "ipad",
+        "filename": "Icon-App-40x40@1x.png",
+        "scale": "1x"
+      },
+      {
+        "size": "40x40",
+        "idiom": "ipad",
+        "filename": "Icon-App-40x40@2x.png",
+        "scale": "2x"
+      },
+      {
+        "size": "50x50",
+        "idiom": "ipad",
+        "filename": "Icon-App-50x50@1x.png",
+        "scale": "1x"
+      },
+      {
+        "size": "50x50",
+        "idiom": "ipad",
+        "filename": "Icon-App-50x50@2x.png",
+        "scale": "2x"
+      },
+      {
+        "size": "72x72",
+        "idiom": "ipad",
+        "filename": "Icon-App-72x72@1x.png",
+        "scale": "1x"
+      },
+      {
+        "size": "72x72",
+        "idiom": "ipad",
+        "filename": "Icon-App-72x72@2x.png",
+        "scale": "2x"
+      },
+      {
+        "size": "76x76",
+        "idiom": "ipad",
+        "filename": "Icon-App-76x76@1x.png",
+        "scale": "1x"
+      },
+      {
+        "size": "76x76",
+        "idiom": "ipad",
+        "filename": "Icon-App-76x76@2x.png",
+        "scale": "2x"
+      },
+      {
+        "size": "83.5x83.5",
+        "idiom": "ipad",
+        "filename": "Icon-App-83.5x83.5@2x.png",
+        "scale": "2x"
+      },
+      {
+        "size": "1024x1024",
+        "idiom": "ios-marketing",
+        "filename": "Icon-App-1024x1024@1x.png",
+        "scale": "1x"
+      }
+    ],
+    "info": {
+      "version": 1,
+      "author": "xcode"
+    }
+  },
+  "android_xml_inset": 0.16
+}
