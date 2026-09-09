@@ -12,6 +12,7 @@ import '../../ui/components/status.dart';
 import '../export/export_service.dart';
 import 'document_editor_screen.dart';
 import 'document_service.dart';
+import 'transcript_viewer_screen.dart';
 
 /// Per-recording view (§5F): readable document rows with real states.
 ///
@@ -367,6 +368,7 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
                   ),
                 ],
                 const SizedBox(height: 12),
+                if (rec != null) _transcriptRow(rec),
                 for (final doc in DocType.values) _docRow(doc),
               ],
             ),
@@ -404,11 +406,13 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
   }
 
   /// Whether anything user-visible exists: any server doc, any cached doc,
-  /// or any generation in flight. Empty-shell recordings get a message.
+  /// a transcript, or any generation in flight. Empty-shell recordings get a
+  /// message.
   bool get _hasAnyContent =>
       _generating != null ||
       _serverHas.values.any((v) => v) ||
-      (_cached?.available.isNotEmpty ?? false);
+      (_cached?.available.isNotEmpty ?? false) ||
+      (_resolved != null && _transcriptOf(_resolved!) != null);
 
   /// §5F/§5A: an explicit empty state for a consultation with no documents.
   Widget _buildEmptyShell(ColorScheme scheme) {
@@ -439,6 +443,59 @@ class _RecordingDetailScreenState extends State<RecordingDetailScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// The transcript (raw on-premise STT output) as a non-empty string, or
+  /// null when absent/empty. Synced as a plain field (`fields.transcript`),
+  /// so it is present on the recording the list/detail fetch returns.
+  String? _transcriptOf(SyncRecording rec) {
+    final t = rec.textField('transcript');
+    return (t != null && t.isNotEmpty) ? t : null;
+  }
+
+  /// View-only transcript row, above the generated documents. The transcript
+  /// is never generated, edited, or exported by the mobile app — it is the
+  /// raw transcription, so this row has no Generate/Export/Edit; tapping
+  /// opens the read-only viewer. A plain ListTile (chevron, no action button)
+  /// cannot overflow at narrow width, so no adaptive LayoutBuilder is needed.
+  Widget _transcriptRow(SyncRecording rec) {
+    final scheme = Theme.of(context).colorScheme;
+    final transcript = _transcriptOf(rec);
+    return Column(
+      children: [
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+          onTap: transcript == null
+              ? null
+              : () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => TranscriptViewerScreen(
+                      transcript: transcript,
+                      recordingTitle: rec.patientName,
+                    ),
+                  ),
+                ),
+          title: const Text(
+            'Transcript',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: StatusLine(
+              tone: transcript != null
+                  ? AppStatusTone.success
+                  : AppStatusTone.neutral,
+              text: transcript != null ? 'Available' : 'No transcript yet',
+              dense: true,
+            ),
+          ),
+          trailing: transcript != null
+              ? Icon(Icons.chevron_right, color: scheme.onSurfaceVariant)
+              : null,
+        ),
+        Divider(height: 1, color: scheme.outlineVariant),
+      ],
     );
   }
 

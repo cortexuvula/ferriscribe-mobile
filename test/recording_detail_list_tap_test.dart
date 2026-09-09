@@ -19,6 +19,13 @@ void main() {
   // document rows are still present with Generate actions.
   testWidgets('list-tap path: empty-shell recording renders title, empty '
       'state, and doc rows — never a blank screen', (tester) async {
+    // Tall viewport so the transcript row + all five doc rows build without
+    // lazy-list scrolling (the added Transcript row pushed the last doc row
+    // below the default 600px fold).
+    tester.view.physicalSize = const Size(412, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(() => db.close());
     final keys = MemoryKeyStore();
@@ -52,6 +59,9 @@ void main() {
     expect(find.text('Consultation'), findsOneWidget);
     // Explicit empty state — visible in both themes.
     expect(find.text('No documents yet for this consultation'), findsOneWidget);
+    // The view-only transcript row is present (no transcript for a shell).
+    expect(find.text('Transcript'), findsOneWidget);
+    expect(find.text('No transcript yet'), findsOneWidget);
     // All five document rows still render with their Generate actions.
     expect(find.text('SOAP Note'), findsOneWidget);
     expect(find.text('Referral'), findsOneWidget);
