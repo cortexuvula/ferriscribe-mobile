@@ -1,4 +1,4 @@
-package com.ferriscribe.ferriscribe_mobile
+package ai.ferriscribe.mobile
 
 import android.os.Bundle
 import android.view.WindowManager

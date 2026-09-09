@@ -1,0 +1,6 @@
+# Copy to android/key.properties and fill in real values (key.properties is gitignored).
+# CI generates this file from GitHub secrets before the release build.
+storePassword=REPLACE_ME
+keyPassword=REPLACE_ME
+keyAlias=ferriscribe
+storeFile=/absolute/path/to/ferriscribe-mobile.jks
