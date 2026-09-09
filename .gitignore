@@ -50,3 +50,5 @@ app.*.map.json
 docs/design/flutter-*/
 docs/design/visual_probe_*_test.dart
 
+# iOS signing artifacts
+*.mobileprovision
