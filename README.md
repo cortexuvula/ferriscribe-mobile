@@ -51,10 +51,56 @@ FerriScribe desktop runs all AI **locally** (whisper.cpp STT + Ollama/LM Studio/
 
 No client-side crypto package — audio encryption was dropped by design; at-rest protection is the server's FE1 on receipt, plus the no-temp-file rule above.
 
+## Bundle ID
+
+`ai.ferriscribe.mobile` — iOS `PRODUCT_BUNDLE_IDENTIFIER` and Android `applicationId`/`namespace`.
+
+## Building & releasing
+
+Signing and release are CI-driven via GitHub Actions (`.github/workflows/`). No signing material is
+committed — certificates, profiles, keystore, and the App Store Connect API key live in GitHub repo
+Secrets (backed up in Bitwarden). See `flutter-mobile-release-ci` and `apple-appstoreconnect-api`
+skills for the full procedure.
+
+| Workflow | Runner | Output |
+| --- | --- | --- |
+| `ios-build.yml` | macOS | signed **ad-hoc** IPA (artifact) |
+| `ios-testflight.yml` | macOS | uploads the App Store IPA to **TestFlight** |
+| `android-build.yml` | ubuntu | signed **release APK** → **GitHub Release** |
+
+All three trigger on `workflow_dispatch` and `v*` tag pushes.
+
+**Release the Android APK** — push a version tag, and CI builds + signs + attaches the APK to an
+auto-created GitHub Release:
+
+```bash
+git tag v1.0.31 && git push --tags
+```
+
+**iOS distribution routes:**
+- **Ad-hoc** — gated by device UDIDs embedded in the profile (own devices only).
+- **TestFlight** — the non-UDID path; the build uploads to App Store Connect for beta review.
+
+**Signing setup:**
+- iOS — `iPhone Distribution: Andre Hugo (RB4QV9W52C)` cert + `IOS_APP_ADHOC` / `IOS_APP_STORE`
+  profiles; Manual signing (`DEVELOPMENT_TEAM RB4QV9W52C`) driven by the committed
+  `ios/ExportOptions-{adhoc,appstore}.plist`.
+- Android — release keystore (alias `ferriscribe`) wired via gitignored `android/key.properties`;
+  falls back to debug signing when absent (local dev).
+
+Local signed builds (dev machine with cert/profile installed and `android/key.properties` present):
+
+```bash
+flutter build apk --release
+flutter build ipa --release --export-options-plist ios/ExportOptions-adhoc.plist   # or -appstore.plist
+```
+
 ## Repo layout
 
 ```
 docs/architecture.md          — components, data model, API contract, security
 docs/implementation-plan.md   — phased plan, milestones, acceptance criteria
 docs/zcode-prompt.md          — the build prompt fed to Zcode
+.github/workflows/            — ios-build, ios-testflight, android-build
+ios/ExportOptions-*.plist     — ad-hoc + app-store export options
 ```
